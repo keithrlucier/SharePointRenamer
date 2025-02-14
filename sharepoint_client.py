@@ -33,27 +33,23 @@ class SharePointClient:
             if not client_id:
                 raise ValueError("AZURE_CLIENT_ID environment variable is not set")
 
-            # Use organizations endpoint for better compatibility
-            authority = "https://login.microsoftonline.com/organizations"
+            # Define SharePoint resource URL and scope
+            resource = f"https://{self.tenant}.sharepoint.com"
+            scope = [f"{resource}/.default"]
 
-            logger.info("Initializing MSAL public client application...")
+            logger.info("Initializing MSAL application...")
 
-            # Initialize MSAL app as public client
+            # Initialize MSAL app
+            authority = f"https://login.microsoftonline.com/{self.tenant}.onmicrosoft.com"
             app = msal.PublicClientApplication(
                 client_id,
                 authority=authority
             )
 
-            # Define Microsoft Graph scopes for SharePoint access
-            scopes = [
-                "Sites.Read.All",
-                "Sites.ReadWrite.All"
-            ]
-
-            logger.info(f"Initiating device code flow with scopes: {scopes}")
+            logger.info(f"Initiating device code flow with scope: {scope}")
 
             # Start device code flow
-            flow = app.initiate_device_flow(scopes)
+            flow = app.initiate_device_flow(scope)
 
             if "user_code" not in flow:
                 logger.error("Could not create device flow")
@@ -78,9 +74,11 @@ class SharePointClient:
             if not client_id:
                 raise ValueError("AZURE_CLIENT_ID environment variable is not set")
 
-            # Use organizations endpoint for better compatibility
-            authority = "https://login.microsoftonline.com/organizations"
+            # Define SharePoint resource URL and scope
+            resource = f"https://{self.tenant}.sharepoint.com"
+            scope = [f"{resource}/.default"]
 
+            authority = f"https://login.microsoftonline.com/{self.tenant}.onmicrosoft.com"
             app = msal.PublicClientApplication(
                 client_id,
                 authority=authority
