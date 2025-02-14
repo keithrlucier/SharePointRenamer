@@ -2,7 +2,6 @@ import logging
 import os
 import re
 from office365.sharepoint.client_context import ClientContext
-from office365.runtime.auth.user_credential import UserCredential
 from office365.runtime.auth.client_credential import ClientCredential
 import requests
 
@@ -72,11 +71,16 @@ class SharePointClient:
 
             logger.info(f"Authenticating with SharePoint site: {self.site_url}")
 
-            # Create client credentials
+            # Create client credentials with specific scopes
             credentials = ClientCredential(client_id, client_secret)
 
-            # Initialize SharePoint client context with credentials
+            # Initialize SharePoint client context with credentials and explicit scopes
             self.ctx = ClientContext(self.site_url).with_credentials(credentials)
+            self.ctx.authentication_context.providers[0].scope = [
+                "https://graph.microsoft.com/.default",
+                "https://graph.microsoft.com/Sites.Read.All",
+                "https://graph.microsoft.com/Sites.ReadWrite.All"
+            ]
 
             # Test the connection and run diagnostics if needed
             return self._test_connection()
