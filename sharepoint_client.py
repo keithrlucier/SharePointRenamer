@@ -35,8 +35,9 @@ class SharePointClient:
             if not client_id or not client_secret:
                 raise ValueError("AZURE_CLIENT_ID and AZURE_CLIENT_SECRET must be set")
 
-            # Define authority and scopes
-            authority = f"https://login.microsoftonline.com/organizations"
+            # Define authority and scopes using specific tenant ID
+            tenant_id = "f8cdef31-a31e-4b4a-93e4-5f571e91255a"  # Using specific tenant ID
+            authority = f"https://login.microsoftonline.com/{tenant_id}"
             resource = f"https://{self.tenant}.sharepoint.com"
             scopes = [f"{resource}/.default"]
 
@@ -67,14 +68,6 @@ class SharePointClient:
                 return True
             else:
                 error_msg = result.get("error_description", "No error description available")
-                if "AADSTS7000229" in error_msg:
-                    error_msg = """
-                    The application requires admin consent in Azure AD. Please have your Azure AD administrator:
-                    1. Go to Azure Portal -> Azure Active Directory -> App registrations
-                    2. Find the application (ID: {client_id})
-                    3. Click on 'API permissions'
-                    4. Click on 'Grant admin consent for [tenant]'
-                    """.format(client_id=client_id)
                 logger.error(f"Failed to acquire token: {error_msg}")
                 raise Exception(f"Failed to acquire token: {error_msg}")
 
