@@ -4,6 +4,7 @@ from office365.sharepoint.client_context import ClientContext
 from office365.runtime.auth.authentication_context import AuthenticationContext
 import logging
 import os
+import requests
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +25,7 @@ class SharePointClient:
         raise ValueError("Invalid SharePoint URL format. Expected: https://<tenant>.sharepoint.com/...")
 
     def authenticate(self):
-        """Initialize authentication using client credentials"""
+        """Initialize authentication using SharePoint app-only authentication"""
         try:
             logger.info("Starting SharePoint authentication process...")
 
@@ -35,31 +36,67 @@ class SharePointClient:
             if not client_id or not client_secret:
                 raise ValueError("AZURE_CLIENT_ID and AZURE_CLIENT_SECRET must be set")
 
-            # Create authentication context
-            auth_ctx = AuthenticationContext(self.site_url)
+            # Define SharePoint-specific endpoints
+            tenant_id = "f8cdef31-a31e-4b4a-93e4-5f571e91255a" #This should be replaced with actual tenant ID
+            authority_url = f"https://login.microsoftonline.com/{tenant_id}"
+            resource = f"https://{self.tenant}.sharepoint.com"
 
-            # Authenticate directly with client credentials
-            if auth_ctx.acquire_token_for_app(client_id=client_id, client_secret=client_secret):
+            logger.info(f"Authenticating with SharePoint site: {self.site_url}")
+            logger.info(f"Using authority URL: {authority_url}")
+
+            # Create MSAL confidential client
+            app = msal.ConfidentialClientApplication(
+                client_id,
+                authority=authority_url,
+                client_credential=client_secret
+            )
+
+            # Acquire token for SharePoint resource
+            scopes = [f"{resource}/.default"]
+            result = app.acquire_token_for_client(scopes)
+
+            if "access_token" in result:
+                # Initialize SharePoint context with the token
+                logger.info("Successfully acquired access token")
+
+                # Create authentication context
+                auth_ctx = AuthenticationContext(self.site_url)
+                auth_ctx.set_token(result["access_token"])
+
+                # Create client context
                 self.ctx = ClientContext(self.site_url, auth_ctx)
 
-                # Test the connection
-                self.ctx.load(self.ctx.web)
-                self.ctx.execute_query()
-
-                logger.info("Successfully authenticated with SharePoint")
-                return True
+                # Test connection with detailed error logging
+                try:
+                    self.ctx.load(self.ctx.web)
+                    self.ctx.execute_query()
+                    logger.info("Successfully connected to SharePoint site")
+                    return True
+                except Exception as e:
+                    logger.error(f"Failed to connect to SharePoint site: {str(e)}")
+                    # Test direct REST API access for debugging
+                    headers = {
+                        'Authorization': f'Bearer {result["access_token"]}',
+                        'Accept': 'application/json;odata=verbose'
+                    }
+                    response = requests.get(f"{self.site_url}/_api/web", headers=headers)
+                    logger.error(f"REST API test response: {response.status_code}")
+                    logger.error(f"REST API response content: {response.text}")
+                    raise
             else:
-                raise Exception("Failed to acquire token for app")
+                error_msg = result.get("error_description", "Unknown error")
+                logger.error(f"Failed to acquire token: {error_msg}")
+                raise Exception(f"Failed to acquire token: {error_msg}")
 
         except Exception as e:
-            logger.error(f"Failed to authenticate: {str(e)}")
+            logger.error(f"Authentication failed: {str(e)}")
             raise
 
     def get_libraries(self):
         """Get all document libraries in the site"""
         try:
             if not self.ctx:
-                self.authenticate()  # Auto-authenticate if needed
+                self.authenticate()
 
             libraries = self.ctx.web.lists.filter("BaseTemplate eq 101").get().execute_query()
             return [lib.title for lib in libraries]
@@ -71,7 +108,7 @@ class SharePointClient:
         """Get all files in a library"""
         try:
             if not self.ctx:
-                self.authenticate()  # Auto-authenticate if needed
+                self.authenticate()
 
             target_list = self.ctx.web.lists.get_by_title(library_name)
             items = target_list.items.get().execute_query()
@@ -92,7 +129,7 @@ class SharePointClient:
         """Rename a file in SharePoint"""
         try:
             if not self.ctx:
-                self.authenticate()  # Auto-authenticate if needed
+                self.authenticate()
 
             target_list = self.ctx.web.lists.get_by_title(library_name)
             items = target_list.items.filter(f"FileLeafRef eq '{old_name}'").get().execute_query()
