@@ -666,12 +666,14 @@ name = "repl-nix-workspace"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "msal" },
     { name = "office365-rest-python-client" },
     { name = "streamlit" },
 ]
 
 [package.metadata]
 requires-dist = [
+    { name = "msal", specifier = ">=1.31.1" },
     { name = "office365-rest-python-client", specifier = ">=2.5.14" },
     { name = "streamlit", specifier = ">=1.42.0" },
 ]

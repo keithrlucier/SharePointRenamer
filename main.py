@@ -16,19 +16,26 @@ def initialize_session_state():
         st.session_state.client = None
 
 def authenticate():
-    """Handle SharePoint authentication"""
+    """Handle SharePoint authentication with MFA support"""
+    st.write("### SharePoint Authentication")
+    st.write("""
+    Please enter your SharePoint site URL and follow the authentication prompt in your browser.
+    You will be asked to sign in with your Microsoft account and complete MFA if required.
+    """)
+
     with st.form("authentication_form"):
         site_url = st.text_input("SharePoint Site URL")
-        username = st.text_input("Username")
-        password = st.text_input("Password", type="password")
         submit = st.form_submit_button("Connect")
 
         if submit:
             try:
-                st.session_state.client = SharePointClient(site_url, username, password)
-                st.session_state.authenticated = True
-                st.success("Successfully connected to SharePoint!")
-                logger.info(f"User {username} authenticated successfully")
+                client = SharePointClient(site_url)
+                if client.authenticate():
+                    st.session_state.client = client
+                    st.session_state.authenticated = True
+                    st.success("Successfully connected to SharePoint!")
+                    logger.info("User authenticated successfully with MFA")
+                    st.experimental_rerun()
             except Exception as e:
                 st.error(f"Authentication failed: {str(e)}")
                 logger.error(f"Authentication failed: {str(e)}")
@@ -44,19 +51,19 @@ def show_file_manager(library_name):
     """Display file management interface"""
     try:
         files = st.session_state.client.get_files(library_name)
-        
+
         st.write("### Files in Library")
-        
+
         for file in files:
             col1, col2, col3 = st.columns([3, 1, 1])
-            
+
             with col1:
                 st.write(file['Name'])
-            
+
             with col2:
                 if len(file['Name']) > 128:  # Warning for long filenames
                     st.warning("Long filename!")
-            
+
             with col3:
                 if st.button(f"Rename {file['Name']}", key=file['Id']):
                     show_rename_form(library_name, file)
@@ -68,7 +75,7 @@ def show_file_manager(library_name):
 def show_rename_form(library_name, file):
     """Display rename form for a file"""
     st.write(f"### Rename File: {file['Name']}")
-    
+
     new_name = st.text_input(
         "New filename",
         value=file['Name'],
@@ -97,9 +104,9 @@ def show_rename_form(library_name, file):
 
 def main():
     st.title("SharePoint File Name Manager")
-    
+
     initialize_session_state()
-    
+
     if not st.session_state.authenticated:
         authenticate()
     else:
@@ -107,7 +114,7 @@ def main():
             st.session_state.authenticated = False
             st.session_state.client = None
             st.experimental_rerun()
-        
+
         show_library_selector()
 
 if __name__ == "__main__":

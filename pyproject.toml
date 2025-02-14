@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "Add your description here"
 requires-python = ">=3.11"
 dependencies = [
+    "msal>=1.31.1",
     "office365-rest-python-client>=2.5.14",
     "streamlit>=1.42.0",
 ]
