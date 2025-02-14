@@ -24,7 +24,7 @@ class SharePointClient:
         raise ValueError("Invalid SharePoint URL format. Expected: https://<tenant>.sharepoint.com/...")
 
     def authenticate(self):
-        """Initialize authentication using MSAL for delegated permissions"""
+        """Initialize authentication using MSAL for client credentials flow"""
         try:
             logger.info("Starting SharePoint authentication process...")
 
@@ -39,12 +39,8 @@ class SharePointClient:
             tenant_id = "f8cdef31-a31e-4b4a-93e4-5f571e91255a"  # Using specific tenant ID
             authority = f"https://login.microsoftonline.com/{tenant_id}"
 
-            # MS Graph delegated permission scopes
-            scopes = [
-                "https://graph.microsoft.com/Sites.Read.All",
-                "https://graph.microsoft.com/Sites.ReadWrite.All",
-                "https://graph.microsoft.com/User.Read"
-            ]
+            # Use proper scope for client credentials flow with .default suffix
+            scopes = ["https://graph.microsoft.com/.default"]
 
             logger.info(f"Using client ID: {client_id[:8]}... with authority: {authority}")
             logger.info(f"Requesting scopes: {scopes}")
@@ -56,15 +52,8 @@ class SharePointClient:
                 client_credential=client_secret
             )
 
-            # First, try to acquire token from cache
-            token = None
-            accounts = app.get_accounts()
-            if accounts:
-                token = app.acquire_token_silent(scopes, account=accounts[0])
-
-            if not token:
-                # If no token in cache, acquire new token
-                token = app.acquire_token_for_client(scopes=scopes)
+            # Acquire token using client credentials flow
+            token = app.acquire_token_for_client(scopes=scopes)
 
             if "access_token" in token:
                 # Create token response and initialize SharePoint context
