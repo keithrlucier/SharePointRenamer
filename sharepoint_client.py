@@ -36,13 +36,14 @@ class SharePointClient:
 
             logger.info(f"Authenticating with SharePoint site: {self.site_url}")
 
-            # Create client credentials
+            # Create client credentials with SharePoint resource URL
+            resource = f"https://{self.tenant}.sharepoint.com/"
             credentials = ClientCredential(client_id, client_secret)
 
             # Initialize SharePoint client context with credentials
             self.ctx = ClientContext(self.site_url).with_credentials(credentials)
 
-            # Test connection
+            # Test connection by trying to access the web context
             self.ctx.load(self.ctx.web)
             self.ctx.execute_query()
             logger.info("Successfully authenticated with SharePoint")
@@ -50,6 +51,17 @@ class SharePointClient:
 
         except Exception as e:
             logger.error(f"Authentication failed: {str(e)}")
+            error_msg = str(e).lower()
+
+            # Add SharePoint-specific error handling
+            if "aadsts500011" in error_msg:
+                logger.error("Invalid resource URL. Ensure the SharePoint site URL is correct.")
+            elif "aadsts650056" in error_msg:
+                logger.error("Misconfigured application. Ensure Sites.Read.All and Sites.ReadWrite.All permissions are granted.")
+            elif "aadsts700016" in error_msg:
+                logger.error("Application not found. Verify the Client ID is correct.")
+            elif "aadsts7000215" in error_msg:
+                logger.error("Invalid client secret. Verify the Client Secret is correct.")
 
             # Add diagnostic information
             try:
@@ -59,10 +71,11 @@ class SharePointClient:
                 )
                 logger.error(f"SharePoint API test - Status code: {response.status_code}")
                 if response.status_code == 401:
-                    logger.error("Authentication failed - Please verify:")
-                    logger.error("1. Azure AD app registration is properly configured")
-                    logger.error("2. Admin consent is granted for API permissions")
-                    logger.error("3. Client ID and Secret are correct")
+                    logger.error("SharePoint Authentication failed:")
+                    logger.error("1. Verify Azure AD app registration")
+                    logger.error("2. Verify admin consent for SharePoint permissions")
+                    logger.error("3. Check Client ID and Secret")
+                    logger.error("4. Ensure app has application-level permissions")
             except Exception as req_error:
                 logger.error(f"Diagnostic request failed: {str(req_error)}")
 
