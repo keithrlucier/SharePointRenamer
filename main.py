@@ -50,7 +50,12 @@ def authenticate():
                 st.error(f"Authentication failed: {str(e)}")
                 logger.error(f"Authentication failed: {str(e)}")
                 if "token" in str(e).lower():
-                    st.info("Please ensure you completed the sign-in process in the browser window. Try again if needed.")
+                    st.info("""
+                    Please ensure you:
+                    1. Allow pop-ups in your browser
+                    2. Complete the sign-in process in the browser window
+                    3. If no browser window opened, try again
+                    """)
 
 def show_library_selector():
     """Display SharePoint library selector"""

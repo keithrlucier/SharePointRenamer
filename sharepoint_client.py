@@ -24,10 +24,12 @@ class SharePointClient:
 
             logger.info("Initializing MSAL application...")
 
-            # Initialize MSAL app with proper redirect URI
+            # Initialize MSAL app with proper redirect URI for Replit
+            redirect_uri = "http://0.0.0.0:5000"  # Use the Replit app URL
             app = msal.PublicClientApplication(
                 client_id,
-                authority=authority
+                authority=authority,
+                redirect_uri=redirect_uri
             )
 
             logger.info("Requesting token interactively...")
@@ -41,7 +43,8 @@ class SharePointClient:
 
             result = app.acquire_token_interactive(
                 scopes,
-                prompt="select_account"  # Force account selection
+                prompt="select_account",  # Force account selection
+                port=5000  # Specify the port for the redirect
             )
 
             logger.info(f"Token acquisition result status: {'Success' if 'access_token' in result else 'Failed'}")
