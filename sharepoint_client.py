@@ -11,8 +11,8 @@ class SharePointClient:
         """Initialize SharePoint client without immediate authentication"""
         self.site_url = site_url
         self.ctx = None
-        # Extract tenant name from site URL
         self.tenant = self._extract_tenant_from_url(site_url)
+        logger.info(f"Initialized SharePoint client for site: {site_url}")
 
     def _extract_tenant_from_url(self, url):
         """Extract tenant name from SharePoint URL"""
@@ -21,6 +21,40 @@ class SharePointClient:
         if match:
             return match.group(1)
         raise ValueError("Invalid SharePoint URL format. Expected: https://<tenant>.sharepoint.com/...")
+
+    def _test_connection(self):
+        """Test SharePoint connection with detailed diagnostics"""
+        try:
+            self.ctx.load(self.ctx.web)
+            self.ctx.execute_query()
+            logger.info("Successfully connected to SharePoint")
+            return True
+        except Exception as e:
+            logger.error(f"Connection test failed: {str(e)}")
+            self._run_diagnostics()
+            raise
+
+    def _run_diagnostics(self):
+        """Run diagnostic tests on SharePoint connection"""
+        try:
+            logger.info("Running SharePoint connection diagnostics...")
+
+            # Test basic site accessibility
+            response = requests.get(f"{self.site_url}/_api/web", 
+                                  headers={'Accept': 'application/json;odata=verbose'})
+
+            logger.info(f"Site accessibility test - Status code: {response.status_code}")
+            if response.status_code == 401:
+                logger.error("Authentication failed - Please verify:")
+                logger.error("1. Azure AD app registration is properly configured")
+                logger.error("2. Admin consent is granted for SharePoint permissions")
+                logger.error("3. Client ID and Secret are correct")
+            elif response.status_code == 404:
+                logger.error("SharePoint site not found - Please verify the site URL")
+
+            logger.info("Diagnostics completed")
+        except Exception as e:
+            logger.error(f"Diagnostics failed: {str(e)}")
 
     def authenticate(self):
         """Initialize authentication using SharePoint client credentials"""
@@ -40,33 +74,17 @@ class SharePointClient:
             credentials = ClientCredential(client_id, client_secret)
 
             # Initialize SharePoint client context with credentials
-            try:
-                self.ctx = ClientContext(self.site_url).with_credentials(credentials)
+            self.ctx = ClientContext(self.site_url).with_credentials(credentials)
 
-                # Test connection
-                logger.info("Testing connection to SharePoint...")
-                self.ctx.load(self.ctx.web)
-                self.ctx.execute_query()
-
-                logger.info("Successfully authenticated with SharePoint")
-                return True
-
-            except Exception as e:
-                logger.error(f"Failed to connect to SharePoint site: {str(e)}")
-                # Diagnostic information
-                try:
-                    headers = {'Accept': 'application/json;odata=verbose'}
-                    response = requests.get(f"{self.site_url}/_api/web", headers=headers)
-                    logger.error(f"REST API test response: {response.status_code}")
-                    logger.error(f"REST API response content: {response.text}")
-                except Exception as req_error:
-                    logger.error(f"Diagnostic request failed: {str(req_error)}")
-                raise
+            # Test the connection and run diagnostics if needed
+            return self._test_connection()
 
         except Exception as e:
             logger.error(f"Authentication failed: {str(e)}")
             if "AADSTS700016" in str(e):
                 logger.error("Application not found in tenant. Please verify the application is registered correctly.")
+            elif "AADSTS7000229" in str(e):
+                logger.error("Service principal missing. Please ensure admin consent is granted in Azure AD.")
             raise
 
     def get_libraries(self):
