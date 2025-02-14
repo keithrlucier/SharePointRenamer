@@ -33,7 +33,7 @@ class SharePointClient:
             if not client_id:
                 raise ValueError("AZURE_CLIENT_ID environment variable is not set")
 
-            authority = "https://login.microsoftonline.com/organizations"
+            authority = f"https://login.microsoftonline.com/{self.tenant}.onmicrosoft.com"
 
             logger.info("Initializing MSAL application...")
 
@@ -43,10 +43,13 @@ class SharePointClient:
                 authority=authority
             )
 
-            # Define SharePoint-specific scopes
-            scopes = [f"https://{self.tenant}.sharepoint.com/.default"]
+            # Define SharePoint-specific scopes for delegated permissions
+            scopes = [
+                "https://graph.microsoft.com/Sites.Read.All",
+                "https://graph.microsoft.com/Sites.ReadWrite.All"
+            ]
 
-            logger.info("Initiating device code flow...")
+            logger.info(f"Initiating device code flow with scopes: {scopes}")
 
             # Start device code flow
             flow = app.initiate_device_flow(scopes)
@@ -74,7 +77,7 @@ class SharePointClient:
             if not client_id:
                 raise ValueError("AZURE_CLIENT_ID environment variable is not set")
 
-            authority = "https://login.microsoftonline.com/organizations"
+            authority = f"https://login.microsoftonline.com/{self.tenant}.onmicrosoft.com"
 
             app = msal.PublicClientApplication(
                 client_id,
