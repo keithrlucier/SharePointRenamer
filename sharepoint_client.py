@@ -5,6 +5,7 @@ from office365.runtime.auth.authentication_context import AuthenticationContext
 import logging
 import os
 import requests
+import webbrowser
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +26,7 @@ class SharePointClient:
         raise ValueError("Invalid SharePoint URL format. Expected: https://<tenant>.sharepoint.com/...")
 
     def authenticate(self):
-        """Initialize authentication using SharePoint app-only authentication"""
+        """Initialize authentication using SharePoint delegated permissions"""
         try:
             logger.info("Starting SharePoint authentication process...")
 
@@ -37,59 +38,44 @@ class SharePointClient:
                 raise ValueError("AZURE_CLIENT_ID and AZURE_CLIENT_SECRET must be set")
 
             # Define SharePoint-specific endpoints
-            tenant_id = "f8cdef31-a31e-4b4a-93e4-5f571e91255a" #This should be replaced with actual tenant ID
+            tenant_id = "f8cdef31-a31e-4b4a-93e4-5f571e91255a"
             authority_url = f"https://login.microsoftonline.com/{tenant_id}"
             resource = f"https://{self.tenant}.sharepoint.com"
 
             logger.info(f"Authenticating with SharePoint site: {self.site_url}")
             logger.info(f"Using authority URL: {authority_url}")
 
-            # Create MSAL confidential client
-            app = msal.ConfidentialClientApplication(
-                client_id,
-                authority=authority_url,
-                client_credential=client_secret
-            )
+            # Create authentication context
+            auth_ctx = AuthenticationContext(self.site_url)
 
-            # Acquire token for SharePoint resource
-            scopes = [f"{resource}/.default"]
-            result = app.acquire_token_for_client(scopes)
-
-            if "access_token" in result:
-                # Initialize SharePoint context with the token
-                logger.info("Successfully acquired access token")
-
-                # Create authentication context
-                auth_ctx = AuthenticationContext(self.site_url)
-                auth_ctx.set_token(result["access_token"])
-
-                # Create client context
+            # Set up with client credentials
+            if auth_ctx.acquire_token_for_user(client_id, client_secret):
                 self.ctx = ClientContext(self.site_url, auth_ctx)
 
-                # Test connection with detailed error logging
                 try:
+                    # Test connection
                     self.ctx.load(self.ctx.web)
                     self.ctx.execute_query()
                     logger.info("Successfully connected to SharePoint site")
                     return True
                 except Exception as e:
                     logger.error(f"Failed to connect to SharePoint site: {str(e)}")
-                    # Test direct REST API access for debugging
                     headers = {
-                        'Authorization': f'Bearer {result["access_token"]}',
                         'Accept': 'application/json;odata=verbose'
                     }
+                    # Add diagnostic information
+                    logger.error("Attempting direct REST API test...")
                     response = requests.get(f"{self.site_url}/_api/web", headers=headers)
                     logger.error(f"REST API test response: {response.status_code}")
                     logger.error(f"REST API response content: {response.text}")
                     raise
             else:
-                error_msg = result.get("error_description", "Unknown error")
-                logger.error(f"Failed to acquire token: {error_msg}")
-                raise Exception(f"Failed to acquire token: {error_msg}")
+                raise Exception("Failed to acquire token for user")
 
         except Exception as e:
             logger.error(f"Authentication failed: {str(e)}")
+            if "AADSTS7000229" in str(e):
+                logger.error("Service Principal not found. Please ensure the app is properly registered in Azure AD")
             raise
 
     def get_libraries(self):
