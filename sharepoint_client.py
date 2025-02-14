@@ -29,11 +29,10 @@ class SharePointClient:
                 authority=authority
             )
 
-            # Define required scopes - Using only resource-specific scopes
+            # Define required scopes - Using only Graph API scopes
             scopes = [
                 "https://graph.microsoft.com/Sites.Read.All",
-                "https://graph.microsoft.com/Sites.ReadWrite.All",
-                "offline_access"
+                "https://graph.microsoft.com/Sites.ReadWrite.All"
             ]
 
             logger.info("Initiating device code flow...")
