@@ -33,8 +33,8 @@ class SharePointClient:
             if not client_id:
                 raise ValueError("AZURE_CLIENT_ID environment variable is not set")
 
-            # Use common endpoint for multi-tenant apps
-            authority = "https://login.microsoftonline.com/common"
+            # Use organizations endpoint for better compatibility
+            authority = "https://login.microsoftonline.com/organizations"
 
             logger.info("Initializing MSAL public client application...")
 
@@ -44,8 +44,11 @@ class SharePointClient:
                 authority=authority
             )
 
-            # Define SharePoint-specific scopes with resource URL
-            scopes = [f"https://{self.tenant}.sharepoint.com/.default"]
+            # Define Microsoft Graph scopes for SharePoint access
+            scopes = [
+                "Sites.Read.All",
+                "Sites.ReadWrite.All"
+            ]
 
             logger.info(f"Initiating device code flow with scopes: {scopes}")
 
@@ -75,8 +78,8 @@ class SharePointClient:
             if not client_id:
                 raise ValueError("AZURE_CLIENT_ID environment variable is not set")
 
-            # Use common endpoint for multi-tenant apps
-            authority = "https://login.microsoftonline.com/common"
+            # Use organizations endpoint for better compatibility
+            authority = "https://login.microsoftonline.com/organizations"
 
             app = msal.PublicClientApplication(
                 client_id,
