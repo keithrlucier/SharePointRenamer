@@ -3,7 +3,6 @@ from office365.runtime.auth.token_response import TokenResponse
 from office365.sharepoint.client_context import ClientContext
 from office365.runtime.auth.authentication_context import AuthenticationContext
 import logging
-import json
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +23,7 @@ class SharePointClient:
 
             logger.info("Initializing MSAL application...")
 
-            # Initialize MSAL app without redirect URI in constructor
+            # Initialize MSAL app without redirect URI
             app = msal.PublicClientApplication(
                 client_id,
                 authority=authority
@@ -39,11 +38,8 @@ class SharePointClient:
                 "https://graph.microsoft.com/Sites.ReadWrite.All"
             ]
 
-            # Specify prompt="select_account" to force account selection
-            result = app.acquire_token_interactive(
-                scopes,
-                prompt="select_account"  # Force account selection
-            )
+            # Basic token acquisition without extra parameters
+            result = app.acquire_token_interactive(scopes)
 
             logger.info(f"Token acquisition result status: {'Success' if 'access_token' in result else 'Failed'}")
 

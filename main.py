@@ -21,10 +21,12 @@ def authenticate():
     """Handle SharePoint authentication with MFA support"""
     st.write("### SharePoint Authentication")
     st.write("""
-    Please enter your SharePoint site URL and follow the authentication prompt in your browser.
-    You will be asked to sign in with your Microsoft account and complete MFA if required.
+    Please enter your SharePoint site URL and click Connect.
+    A Microsoft sign-in page will open in a new window.
 
-    Note: A new browser window will open for secure authentication.
+    1. Sign in with your Microsoft account
+    2. Complete MFA if required
+    3. Return to this page after successful sign-in
     """)
 
     with st.form("authentication_form"):
@@ -35,7 +37,7 @@ def authenticate():
         if submit and site_url:
             try:
                 st.session_state.auth_in_progress = True
-                with st.spinner("Initiating authentication process... Please complete the sign-in in your browser window."):
+                with st.spinner("Initiating Microsoft sign-in... Please follow the prompts in the new window"):
                     client = SharePointClient(site_url)
                     if client.authenticate():
                         st.session_state.client = client
@@ -49,13 +51,13 @@ def authenticate():
                 st.session_state.auth_in_progress = False
                 st.error(f"Authentication failed: {str(e)}")
                 logger.error(f"Authentication failed: {str(e)}")
-                if "token" in str(e).lower():
-                    st.info("""
-                    Please ensure you:
-                    1. Allow pop-ups in your browser
-                    2. Complete the sign-in process in the browser window
-                    3. If no browser window opened, try again
-                    """)
+                st.info("""
+                If authentication failed:
+                1. Make sure you entered the correct SharePoint URL
+                2. Check your internet connection
+                3. Try signing in again
+                4. Contact your administrator if the issue persists
+                """)
 
 def show_library_selector():
     """Display SharePoint library selector"""
