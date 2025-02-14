@@ -39,11 +39,10 @@ class SharePointClient:
                 "https://graph.microsoft.com/Sites.ReadWrite.All"
             ]
 
-            # Specify redirect URI in acquire_token_interactive
+            # Specify prompt="select_account" to force account selection
             result = app.acquire_token_interactive(
                 scopes,
-                prompt="select_account",  # Force account selection
-                redirect_uri="http://0.0.0.0:5000"  # Specify redirect URI here
+                prompt="select_account"  # Force account selection
             )
 
             logger.info(f"Token acquisition result status: {'Success' if 'access_token' in result else 'Failed'}")
