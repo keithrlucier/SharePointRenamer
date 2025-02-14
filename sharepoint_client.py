@@ -3,6 +3,7 @@ from office365.runtime.auth.token_response import TokenResponse
 from office365.sharepoint.client_context import ClientContext
 from office365.runtime.auth.authentication_context import AuthenticationContext
 import logging
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -11,15 +12,28 @@ class SharePointClient:
         """Initialize SharePoint client without immediate authentication"""
         self.site_url = site_url
         self.ctx = None
+        # Extract tenant name from site URL
+        self.tenant = self._extract_tenant_from_url(site_url)
+
+    def _extract_tenant_from_url(self, url):
+        """Extract tenant name from SharePoint URL"""
+        import re
+        match = re.search(r'https://([^.]+)\.sharepoint\.com', url)
+        if match:
+            return match.group(1)
+        raise ValueError("Invalid SharePoint URL format. Expected: https://<tenant>.sharepoint.com/...")
 
     def authenticate(self):
         """Authenticate using MSAL device code flow"""
         try:
             logger.info("Starting SharePoint authentication process...")
 
-            # Azure AD app registration details
-            client_id = "1b730954-1685-4b74-9bfd-dac224a7b894"  # Microsoft Graph PowerShell client ID
-            authority = "https://login.microsoftonline.com/common"
+            # Get Azure AD app registration client ID
+            client_id = os.environ.get('AZURE_CLIENT_ID')
+            if not client_id:
+                raise ValueError("AZURE_CLIENT_ID environment variable is not set")
+
+            authority = "https://login.microsoftonline.com/organizations"
 
             logger.info("Initializing MSAL application...")
 
@@ -29,11 +43,8 @@ class SharePointClient:
                 authority=authority
             )
 
-            # Define required scopes - Using only Graph API scopes
-            scopes = [
-                "https://graph.microsoft.com/Sites.Read.All",
-                "https://graph.microsoft.com/Sites.ReadWrite.All"
-            ]
+            # Define SharePoint-specific scopes
+            scopes = [f"https://{self.tenant}.sharepoint.com/.default"]
 
             logger.info("Initiating device code flow...")
 
@@ -58,9 +69,12 @@ class SharePointClient:
         try:
             logger.info("Completing device code authentication...")
 
-            # Azure AD app registration details
-            client_id = "1b730954-1685-4b74-9bfd-dac224a7b894"
-            authority = "https://login.microsoftonline.com/common"
+            # Get Azure AD app registration client ID
+            client_id = os.environ.get('AZURE_CLIENT_ID')
+            if not client_id:
+                raise ValueError("AZURE_CLIENT_ID environment variable is not set")
+
+            authority = "https://login.microsoftonline.com/organizations"
 
             app = msal.PublicClientApplication(
                 client_id,
