@@ -11,23 +11,17 @@ logger = logging.getLogger(__name__)
 def initialize_session_state():
     """Initialize session state variables"""
     if 'authenticated' not in st.session_state:
-        st.session_state.authenticated = False
+        st.session_state['authenticated'] = False
     if 'client' not in st.session_state:
-        st.session_state.client = None
+        st.session_state['client'] = None
+    if 'auth_flow' not in st.session_state:
+        st.session_state['auth_flow'] = None
     if 'auth_in_progress' not in st.session_state:
-        st.session_state.auth_in_progress = False
+        st.session_state['auth_in_progress'] = False
 
 def authenticate():
-    """Handle SharePoint authentication with MFA support"""
+    """Handle SharePoint authentication with device code flow"""
     st.write("### SharePoint Authentication")
-    st.write("""
-    Please enter your SharePoint site URL and click Connect.
-    A Microsoft sign-in page will open in a new window.
-
-    1. Sign in with your Microsoft account
-    2. Complete MFA if required
-    3. Return to this page after successful sign-in
-    """)
 
     with st.form("authentication_form"):
         site_url = st.text_input("SharePoint Site URL", 
@@ -36,28 +30,53 @@ def authenticate():
 
         if submit and site_url:
             try:
-                st.session_state.auth_in_progress = True
-                with st.spinner("Initiating Microsoft sign-in... Please follow the prompts in the new window"):
-                    client = SharePointClient(site_url)
-                    if client.authenticate():
-                        st.session_state.client = client
-                        st.session_state.authenticated = True
-                        st.session_state.auth_in_progress = False
-                        st.success("Successfully connected to SharePoint!")
-                        logger.info("User authenticated successfully with MFA")
-                        time.sleep(2)  # Give user time to see success message
-                        st.experimental_rerun()
+                client = SharePointClient(site_url)
+                flow = client.authenticate()
+
+                if flow and "user_code" in flow:
+                    st.session_state.client = client
+                    st.session_state.auth_flow = flow
+                    st.session_state.auth_in_progress = True
+
+                    # Show authentication instructions
+                    st.info(f"""
+                    Please follow these steps to authenticate:
+
+                    1. Go to: {flow['verification_uri']}
+                    2. Enter this code: {flow['user_code']}
+                    3. Sign in with your Microsoft account
+                    4. After signing in, click 'Complete Authentication' below
+
+                    The code will expire in {flow['expires_in']} seconds.
+                    """)
+
             except Exception as e:
-                st.session_state.auth_in_progress = False
                 st.error(f"Authentication failed: {str(e)}")
                 logger.error(f"Authentication failed: {str(e)}")
                 st.info("""
-                If authentication failed:
-                1. Make sure you entered the correct SharePoint URL
+                Please ensure you:
+                1. Enter a valid SharePoint site URL
                 2. Check your internet connection
-                3. Try signing in again
-                4. Contact your administrator if the issue persists
+                3. Try again if needed
                 """)
+                return
+
+    # Show complete authentication button if we have a valid flow
+    if st.session_state.get('auth_in_progress', False):
+        if st.button("Complete Authentication"):
+            try:
+                with st.spinner("Completing authentication..."):
+                    if st.session_state.client.complete_authentication(st.session_state.auth_flow):
+                        st.session_state.authenticated = True
+                        st.session_state.auth_in_progress = False
+                        st.session_state.auth_flow = None
+                        st.success("Successfully connected to SharePoint!")
+                        logger.info("User authenticated successfully")
+                        time.sleep(2)
+                        st.experimental_rerun()
+            except Exception as e:
+                st.error(f"Authentication failed: {str(e)}")
+                logger.error(f"Authentication failed: {str(e)}")
 
 def show_library_selector():
     """Display SharePoint library selector"""
@@ -143,6 +162,7 @@ def show_rename_form(library_name, file):
 def main():
     st.title("SharePoint File Name Manager")
 
+    # Initialize session state first
     initialize_session_state()
 
     if not st.session_state.authenticated:
@@ -151,6 +171,8 @@ def main():
         if st.sidebar.button("Logout"):
             st.session_state.authenticated = False
             st.session_state.client = None
+            st.session_state.auth_flow = None
+            st.session_state.auth_in_progress = False
             st.experimental_rerun()
 
         show_library_selector()

@@ -13,7 +13,7 @@ class SharePointClient:
         self.ctx = None
 
     def authenticate(self):
-        """Authenticate using MSAL interactive authentication"""
+        """Authenticate using MSAL device code flow"""
         try:
             logger.info("Starting SharePoint authentication process...")
 
@@ -23,23 +23,53 @@ class SharePointClient:
 
             logger.info("Initializing MSAL application...")
 
-            # Initialize MSAL app without redirect URI
+            # Initialize MSAL app
             app = msal.PublicClientApplication(
                 client_id,
                 authority=authority
             )
 
-            logger.info("Requesting token interactively...")
-
-            # Get token interactively with expanded permissions
+            # Define required scopes
             scopes = [
                 "https://graph.microsoft.com/.default",
                 "https://graph.microsoft.com/Sites.Read.All",
                 "https://graph.microsoft.com/Sites.ReadWrite.All"
             ]
 
-            # Basic token acquisition without extra parameters
-            result = app.acquire_token_interactive(scopes)
+            logger.info("Initiating device code flow...")
+
+            # Start device code flow
+            flow = app.initiate_device_flow(scopes)
+
+            if "user_code" not in flow:
+                logger.error("Could not create device flow")
+                raise Exception(
+                    f"Could not create device flow. Error: {flow.get('error_description', 'No error description')}"
+                )
+
+            logger.info("Device code flow initiated successfully")
+            return flow
+
+        except Exception as e:
+            logger.error(f"Failed to initialize authentication: {str(e)}")
+            raise
+
+    def complete_authentication(self, flow):
+        """Complete the device code authentication flow"""
+        try:
+            logger.info("Completing device code authentication...")
+
+            # Azure AD app registration details
+            client_id = "1b730954-1685-4b74-9bfd-dac224a7b894"
+            authority = "https://login.microsoftonline.com/common"
+
+            app = msal.PublicClientApplication(
+                client_id,
+                authority=authority
+            )
+
+            # Get token using device code flow
+            result = app.acquire_token_by_device_flow(flow)
 
             logger.info(f"Token acquisition result status: {'Success' if 'access_token' in result else 'Failed'}")
 
@@ -56,7 +86,7 @@ class SharePointClient:
                 self.ctx.load(self.ctx.web)
                 self.ctx.execute_query()
 
-                logger.info("SharePoint client initialized successfully with modern authentication")
+                logger.info("SharePoint client initialized successfully")
                 return True
             else:
                 error_msg = result.get("error_description", "No error description available")
@@ -64,7 +94,7 @@ class SharePointClient:
                 raise Exception(f"Failed to acquire token: {error_msg}")
 
         except Exception as e:
-            logger.error(f"Failed to initialize SharePoint client: {str(e)}")
+            logger.error(f"Failed to complete authentication: {str(e)}")
             raise
 
     def get_libraries(self):
