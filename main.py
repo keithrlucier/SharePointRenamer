@@ -14,6 +14,8 @@ def initialize_session_state():
         st.session_state.authenticated = False
     if 'client' not in st.session_state:
         st.session_state.client = None
+    if 'auth_in_progress' not in st.session_state:
+        st.session_state.auth_in_progress = False
 
 def authenticate():
     """Handle SharePoint authentication with MFA support"""
@@ -21,38 +23,64 @@ def authenticate():
     st.write("""
     Please enter your SharePoint site URL and follow the authentication prompt in your browser.
     You will be asked to sign in with your Microsoft account and complete MFA if required.
+
+    Note: A new browser window will open for secure authentication.
     """)
 
     with st.form("authentication_form"):
-        site_url = st.text_input("SharePoint Site URL")
+        site_url = st.text_input("SharePoint Site URL", 
+                                help="Enter the full SharePoint site URL (e.g., https://your-tenant.sharepoint.com/sites/your-site)")
         submit = st.form_submit_button("Connect")
 
-        if submit:
+        if submit and site_url:
             try:
-                client = SharePointClient(site_url)
-                if client.authenticate():
-                    st.session_state.client = client
-                    st.session_state.authenticated = True
-                    st.success("Successfully connected to SharePoint!")
-                    logger.info("User authenticated successfully with MFA")
-                    st.experimental_rerun()
+                st.session_state.auth_in_progress = True
+                with st.spinner("Initiating authentication process... Please complete the sign-in in your browser window."):
+                    client = SharePointClient(site_url)
+                    if client.authenticate():
+                        st.session_state.client = client
+                        st.session_state.authenticated = True
+                        st.session_state.auth_in_progress = False
+                        st.success("Successfully connected to SharePoint!")
+                        logger.info("User authenticated successfully with MFA")
+                        time.sleep(2)  # Give user time to see success message
+                        st.experimental_rerun()
             except Exception as e:
+                st.session_state.auth_in_progress = False
                 st.error(f"Authentication failed: {str(e)}")
                 logger.error(f"Authentication failed: {str(e)}")
+                if "token" in str(e).lower():
+                    st.info("Please ensure you completed the sign-in process in the browser window. Try again if needed.")
 
 def show_library_selector():
     """Display SharePoint library selector"""
-    libraries = st.session_state.client.get_libraries()
-    selected_library = st.selectbox("Select SharePoint Library", libraries)
-    if selected_library:
-        show_file_manager(selected_library)
+    try:
+        with st.spinner("Loading SharePoint libraries..."):
+            libraries = st.session_state.client.get_libraries()
+            if not libraries:
+                st.warning("No document libraries found in this SharePoint site.")
+                return
+
+        selected_library = st.selectbox("Select SharePoint Library", libraries)
+        if selected_library:
+            show_file_manager(selected_library)
+    except Exception as e:
+        st.error(f"Error loading libraries: {str(e)}")
+        logger.error(f"Error loading libraries: {str(e)}")
+        if "authentication" in str(e).lower():
+            st.session_state.authenticated = False
+            st.experimental_rerun()
 
 def show_file_manager(library_name):
     """Display file management interface"""
     try:
-        files = st.session_state.client.get_files(library_name)
+        with st.spinner("Loading files..."):
+            files = st.session_state.client.get_files(library_name)
 
         st.write("### Files in Library")
+        if not files:
+            st.info("No files found in this library.")
+            return
 
         for file in files:
             col1, col2, col3 = st.columns([3, 1, 1])
@@ -71,6 +99,9 @@ def show_file_manager(library_name):
     except Exception as e:
         st.error(f"Error loading files: {str(e)}")
         logger.error(f"Error loading files: {str(e)}")
+        if "authentication" in str(e).lower():
+            st.session_state.authenticated = False
+            st.experimental_rerun()
 
 def show_rename_form(library_name, file):
     """Display rename form for a file"""
@@ -110,7 +141,7 @@ def main():
     if not st.session_state.authenticated:
         authenticate()
     else:
-        if st.button("Logout"):
+        if st.sidebar.button("Logout"):
             st.session_state.authenticated = False
             st.session_state.client = None
             st.experimental_rerun()

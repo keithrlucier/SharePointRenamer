@@ -16,33 +16,55 @@ class SharePointClient:
     def authenticate(self):
         """Authenticate using MSAL interactive authentication"""
         try:
+            logger.info("Starting SharePoint authentication process...")
+
             # Azure AD app registration details
             client_id = "1b730954-1685-4b74-9bfd-dac224a7b894"  # Microsoft Graph PowerShell client ID
             authority = "https://login.microsoftonline.com/common"
 
-            # Initialize MSAL app
+            logger.info("Initializing MSAL application...")
+
+            # Initialize MSAL app with proper redirect URI
             app = msal.PublicClientApplication(
                 client_id,
                 authority=authority
             )
 
-            # Get token interactively
-            scopes = ["https://graph.microsoft.com/.default"]
-            result = app.acquire_token_interactive(scopes)
+            logger.info("Requesting token interactively...")
+
+            # Get token interactively with expanded permissions
+            scopes = [
+                "https://graph.microsoft.com/.default",
+                "https://graph.microsoft.com/Sites.Read.All",
+                "https://graph.microsoft.com/Sites.ReadWrite.All"
+            ]
+
+            result = app.acquire_token_interactive(
+                scopes,
+                prompt="select_account"  # Force account selection
+            )
+
+            logger.info(f"Token acquisition result status: {'Success' if 'access_token' in result else 'Failed'}")
 
             if "access_token" in result:
+                logger.info("Access token acquired successfully")
                 # Create token response
                 token = TokenResponse(result)
 
                 # Initialize SharePoint context with token
+                logger.info("Initializing SharePoint context...")
                 self.ctx = ClientContext(self.site_url).with_access_token(token.access_token)
+
+                logger.info("Loading SharePoint web context...")
                 self.ctx.load(self.ctx.web)
                 self.ctx.execute_query()
 
                 logger.info("SharePoint client initialized successfully with modern authentication")
                 return True
             else:
-                raise Exception("Failed to acquire token")
+                error_msg = result.get("error_description", "No error description available")
+                logger.error(f"Failed to acquire token: {error_msg}")
+                raise Exception(f"Failed to acquire token: {error_msg}")
 
         except Exception as e:
             logger.error(f"Failed to initialize SharePoint client: {str(e)}")
