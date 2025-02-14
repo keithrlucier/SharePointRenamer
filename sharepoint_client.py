@@ -24,85 +24,41 @@ class SharePointClient:
         raise ValueError("Invalid SharePoint URL format. Expected: https://<tenant>.sharepoint.com/...")
 
     def authenticate(self):
-        """Authenticate using MSAL device code flow"""
+        """Initialize authentication using MSAL confidential client"""
         try:
             logger.info("Starting SharePoint authentication process...")
 
-            # Get Azure AD app registration client ID
+            # Get Azure AD app credentials
             client_id = os.environ.get('AZURE_CLIENT_ID')
-            if not client_id:
-                raise ValueError("AZURE_CLIENT_ID environment variable is not set")
+            client_secret = os.environ.get('AZURE_CLIENT_SECRET')
 
-            # Define SharePoint resource URL and scope
-            resource = f"https://{self.tenant}.sharepoint.com"
-            scope = [f"{resource}/.default"]
+            if not client_id or not client_secret:
+                raise ValueError("AZURE_CLIENT_ID and AZURE_CLIENT_SECRET must be set")
 
-            logger.info("Initializing MSAL application...")
-
-            # Initialize MSAL app
+            # Define authority and scopes
             authority = f"https://login.microsoftonline.com/{self.tenant}.onmicrosoft.com"
-            app = msal.PublicClientApplication(
+            scopes = [f"https://{self.tenant}.sharepoint.com/.default"]
+
+            # Initialize confidential client application
+            app = msal.ConfidentialClientApplication(
                 client_id,
-                authority=authority
+                authority=authority,
+                client_credential=client_secret
             )
 
-            logger.info(f"Initiating device code flow with scope: {scope}")
-
-            # Start device code flow
-            flow = app.initiate_device_flow(scope)
-
-            if "user_code" not in flow:
-                logger.error("Could not create device flow")
-                raise Exception(
-                    f"Could not create device flow. Error: {flow.get('error_description', 'No error description')}"
-                )
-
-            logger.info("Device code flow initiated successfully")
-            return flow
-
-        except Exception as e:
-            logger.error(f"Failed to initialize authentication: {str(e)}")
-            raise
-
-    def complete_authentication(self, flow):
-        """Complete the device code authentication flow"""
-        try:
-            logger.info("Completing device code authentication...")
-
-            # Get Azure AD app registration client ID
-            client_id = os.environ.get('AZURE_CLIENT_ID')
-            if not client_id:
-                raise ValueError("AZURE_CLIENT_ID environment variable is not set")
-
-            # Define SharePoint resource URL and scope
-            resource = f"https://{self.tenant}.sharepoint.com"
-            scope = [f"{resource}/.default"]
-
-            authority = f"https://login.microsoftonline.com/{self.tenant}.onmicrosoft.com"
-            app = msal.PublicClientApplication(
-                client_id,
-                authority=authority
-            )
-
-            # Get token using device code flow
-            result = app.acquire_token_by_device_flow(flow)
-
-            logger.info(f"Token acquisition result status: {'Success' if 'access_token' in result else 'Failed'}")
+            # Acquire token using client credentials flow
+            result = app.acquire_token_for_client(scopes=scopes)
 
             if "access_token" in result:
-                logger.info("Access token acquired successfully")
-                # Create token response
+                # Create token response and initialize SharePoint context
                 token = TokenResponse(result)
-
-                # Initialize SharePoint context with token
-                logger.info("Initializing SharePoint context...")
                 self.ctx = ClientContext(self.site_url).with_access_token(token.access_token)
 
-                logger.info("Loading SharePoint web context...")
+                # Test the connection
                 self.ctx.load(self.ctx.web)
                 self.ctx.execute_query()
 
-                logger.info("SharePoint client initialized successfully")
+                logger.info("Successfully authenticated with SharePoint")
                 return True
             else:
                 error_msg = result.get("error_description", "No error description available")
@@ -110,14 +66,14 @@ class SharePointClient:
                 raise Exception(f"Failed to acquire token: {error_msg}")
 
         except Exception as e:
-            logger.error(f"Failed to complete authentication: {str(e)}")
+            logger.error(f"Failed to authenticate: {str(e)}")
             raise
 
     def get_libraries(self):
         """Get all document libraries in the site"""
         try:
             if not self.ctx:
-                raise Exception("Client not authenticated")
+                self.authenticate()  # Auto-authenticate if needed
 
             libraries = self.ctx.web.lists.filter("BaseTemplate eq 101").get().execute_query()
             return [lib.title for lib in libraries]
@@ -129,7 +85,7 @@ class SharePointClient:
         """Get all files in a library"""
         try:
             if not self.ctx:
-                raise Exception("Client not authenticated")
+                self.authenticate()  # Auto-authenticate if needed
 
             target_list = self.ctx.web.lists.get_by_title(library_name)
             items = target_list.items.get().execute_query()
@@ -150,7 +106,7 @@ class SharePointClient:
         """Rename a file in SharePoint"""
         try:
             if not self.ctx:
-                raise Exception("Client not authenticated")
+                self.authenticate()  # Auto-authenticate if needed
 
             target_list = self.ctx.web.lists.get_by_title(library_name)
             items = target_list.items.filter(f"FileLeafRef eq '{old_name}'").get().execute_query()

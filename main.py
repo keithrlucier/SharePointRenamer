@@ -14,42 +14,26 @@ def initialize_session_state():
         st.session_state['authenticated'] = False
     if 'client' not in st.session_state:
         st.session_state['client'] = None
-    if 'auth_flow' not in st.session_state:
-        st.session_state['auth_flow'] = None
-    if 'auth_in_progress' not in st.session_state:
-        st.session_state['auth_in_progress'] = False
 
 def authenticate():
-    """Handle SharePoint authentication with device code flow"""
+    """Handle SharePoint authentication"""
     st.write("### SharePoint Authentication")
 
     with st.form("authentication_form"):
         site_url = st.text_input("SharePoint Site URL", 
-                                help="Enter the full SharePoint site URL (e.g., https://your-tenant.sharepoint.com/sites/your-site)")
+                             help="Enter the full SharePoint site URL (e.g., https://your-tenant.sharepoint.com/sites/your-site)")
         submit = st.form_submit_button("Connect")
 
         if submit and site_url:
             try:
-                client = SharePointClient(site_url)
-                flow = client.authenticate()
-
-                if flow and "user_code" in flow:
-                    st.session_state.client = client
-                    st.session_state.auth_flow = flow
-                    st.session_state.auth_in_progress = True
-
-                    # Show authentication instructions
-                    st.info(f"""
-                    Please follow these steps to authenticate:
-
-                    1. Go to: {flow['verification_uri']}
-                    2. Enter this code: {flow['user_code']}
-                    3. Sign in with your Microsoft account
-                    4. After signing in, click 'Complete Authentication' below
-
-                    The code will expire in {flow['expires_in']} seconds.
-                    """)
-
+                with st.spinner("Connecting to SharePoint..."):
+                    client = SharePointClient(site_url)
+                    if client.authenticate():
+                        st.session_state.client = client
+                        st.session_state.authenticated = True
+                        st.success("Successfully connected to SharePoint!")
+                        time.sleep(2)
+                        st.experimental_rerun()
             except Exception as e:
                 st.error(f"Authentication failed: {str(e)}")
                 logger.error(f"Authentication failed: {str(e)}")
@@ -57,26 +41,8 @@ def authenticate():
                 Please ensure you:
                 1. Enter a valid SharePoint site URL
                 2. Check your internet connection
-                3. Try again if needed
+                3. Verify your Azure AD app registration settings
                 """)
-                return
-
-    # Show complete authentication button if we have a valid flow
-    if st.session_state.get('auth_in_progress', False):
-        if st.button("Complete Authentication"):
-            try:
-                with st.spinner("Completing authentication..."):
-                    if st.session_state.client.complete_authentication(st.session_state.auth_flow):
-                        st.session_state.authenticated = True
-                        st.session_state.auth_in_progress = False
-                        st.session_state.auth_flow = None
-                        st.success("Successfully connected to SharePoint!")
-                        logger.info("User authenticated successfully")
-                        time.sleep(2)
-                        st.experimental_rerun()
-            except Exception as e:
-                st.error(f"Authentication failed: {str(e)}")
-                logger.error(f"Authentication failed: {str(e)}")
 
 def show_library_selector():
     """Display SharePoint library selector"""
@@ -171,8 +137,6 @@ def main():
         if st.sidebar.button("Logout"):
             st.session_state.authenticated = False
             st.session_state.client = None
-            st.session_state.auth_flow = None
-            st.session_state.auth_in_progress = False
             st.experimental_rerun()
 
         show_library_selector()
