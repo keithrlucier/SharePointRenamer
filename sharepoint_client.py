@@ -24,7 +24,7 @@ class SharePointClient:
         raise ValueError("Invalid SharePoint URL format. Expected: https://<tenant>.sharepoint.com/...")
 
     def authenticate(self):
-        """Initialize authentication using MSAL for client credentials flow"""
+        """Initialize authentication using client credentials"""
         try:
             logger.info("Starting SharePoint authentication process...")
 
@@ -35,32 +35,11 @@ class SharePointClient:
             if not client_id or not client_secret:
                 raise ValueError("AZURE_CLIENT_ID and AZURE_CLIENT_SECRET must be set")
 
-            # Define authority and scopes using specific tenant ID
-            tenant_id = "f8cdef31-a31e-4b4a-93e4-5f571e91255a"  # Using specific tenant ID
-            authority = f"https://login.microsoftonline.com/{tenant_id}"
+            # Create authentication context
+            auth_ctx = AuthenticationContext(self.site_url)
 
-            # Use proper scope for client credentials flow with .default suffix
-            scopes = ["https://graph.microsoft.com/.default"]
-
-            logger.info(f"Using client ID: {client_id[:8]}... with authority: {authority}")
-            logger.info(f"Requesting scopes: {scopes}")
-
-            # Initialize confidential client application
-            app = msal.ConfidentialClientApplication(
-                client_id,
-                authority=authority,
-                client_credential=client_secret
-            )
-
-            # Acquire token using client credentials flow
-            token = app.acquire_token_for_client(scopes=scopes)
-
-            if "access_token" in token:
-                # Create token response and initialize SharePoint context
-                logger.info("Successfully acquired access token")
-                token_response = TokenResponse(token)
-                auth_ctx = AuthenticationContext(self.site_url)
-                auth_ctx.acquire_token_for_app(client_id, client_secret)
+            # Authenticate directly with client credentials
+            if auth_ctx.acquire_token_for_app(client_id=client_id, client_secret=client_secret):
                 self.ctx = ClientContext(self.site_url, auth_ctx)
 
                 # Test the connection
@@ -70,9 +49,7 @@ class SharePointClient:
                 logger.info("Successfully authenticated with SharePoint")
                 return True
             else:
-                error_msg = token.get("error_description", "No error description available")
-                logger.error(f"Failed to acquire token: {error_msg}")
-                raise Exception(f"Failed to acquire token: {error_msg}")
+                raise Exception("Failed to acquire token for app")
 
         except Exception as e:
             logger.error(f"Failed to authenticate: {str(e)}")
