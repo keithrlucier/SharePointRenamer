@@ -36,13 +36,12 @@ class SharePointClient:
                 raise ValueError("AZURE_CLIENT_ID and AZURE_CLIENT_SECRET must be set")
 
             # Define authority and scopes
-            # Using organizations endpoint instead of tenant-specific
-            authority = "https://login.microsoftonline.com/organizations"
+            authority = f"https://login.microsoftonline.com/organizations"
             resource = f"https://{self.tenant}.sharepoint.com"
             scopes = [f"{resource}/.default"]
 
-            logger.info(f"Initializing MSAL application with authority: {authority}")
-            logger.info(f"Using scopes: {scopes}")
+            logger.info(f"Using client ID: {client_id[:8]}... with authority: {authority}")
+            logger.info(f"Requesting scopes: {scopes}")
 
             # Initialize confidential client application
             app = msal.ConfidentialClientApplication(
@@ -56,6 +55,7 @@ class SharePointClient:
 
             if "access_token" in result:
                 # Create token response and initialize SharePoint context
+                logger.info("Successfully acquired access token")
                 token = TokenResponse(result)
                 self.ctx = ClientContext(self.site_url).with_access_token(token.access_token)
 
@@ -67,6 +67,14 @@ class SharePointClient:
                 return True
             else:
                 error_msg = result.get("error_description", "No error description available")
+                if "AADSTS7000229" in error_msg:
+                    error_msg = """
+                    The application requires admin consent in Azure AD. Please have your Azure AD administrator:
+                    1. Go to Azure Portal -> Azure Active Directory -> App registrations
+                    2. Find the application (ID: {client_id})
+                    3. Click on 'API permissions'
+                    4. Click on 'Grant admin consent for [tenant]'
+                    """.format(client_id=client_id)
                 logger.error(f"Failed to acquire token: {error_msg}")
                 raise Exception(f"Failed to acquire token: {error_msg}")
 

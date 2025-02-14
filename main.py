@@ -21,7 +21,7 @@ def authenticate():
 
     with st.form("authentication_form"):
         site_url = st.text_input("SharePoint Site URL", 
-                             help="Enter the full SharePoint site URL (e.g., https://your-tenant.sharepoint.com/sites/your-site)")
+                                 help="Enter the full SharePoint site URL (e.g., https://your-tenant.sharepoint.com/sites/your-site)")
         submit = st.form_submit_button("Connect")
 
         if submit and site_url:
@@ -37,12 +37,25 @@ def authenticate():
             except Exception as e:
                 st.error(f"Authentication failed: {str(e)}")
                 logger.error(f"Authentication failed: {str(e)}")
-                st.info("""
-                Please ensure you:
-                1. Enter a valid SharePoint site URL
-                2. Check your internet connection
-                3. Verify your Azure AD app registration settings
-                """)
+
+                if "AADSTS7000229" in str(e):
+                    st.warning("""
+                    ### Admin Consent Required
+                    This application needs admin consent in Azure AD. Please contact your Azure AD administrator to:
+                    1. Go to Azure Portal -> Azure Active Directory -> App registrations
+                    2. Find the application
+                    3. Click on 'API permissions'
+                    4. Click on 'Grant admin consent for [tenant]'
+
+                    Once admin consent is granted, try connecting again.
+                    """)
+                else:
+                    st.info("""
+                    Please ensure you:
+                    1. Enter a valid SharePoint site URL
+                    2. Check your internet connection
+                    3. Verify your Azure AD app registration settings
+                    """)
 
 def show_library_selector():
     """Display SharePoint library selector"""
