@@ -22,41 +22,6 @@ class SharePointClient:
             return match.group(1)
         raise ValueError("Invalid SharePoint URL format. Expected: https://<tenant>.sharepoint.com/...")
 
-    def _test_connection(self):
-        """Test SharePoint connection with detailed diagnostics"""
-        try:
-            self.ctx.load(self.ctx.web)
-            self.ctx.execute_query()
-            logger.info("Successfully connected to SharePoint")
-            return True
-        except Exception as e:
-            logger.error(f"Connection test failed: {str(e)}")
-            self._run_diagnostics()
-            raise
-
-    def _run_diagnostics(self):
-        """Run diagnostic tests on SharePoint connection"""
-        try:
-            logger.info("Running SharePoint connection diagnostics...")
-
-            # Test basic site accessibility
-            response = requests.get(f"{self.site_url}/_api/web", 
-                                  headers={'Accept': 'application/json;odata=verbose'})
-
-            logger.info(f"Site accessibility test - Status code: {response.status_code}")
-            if response.status_code == 401:
-                logger.error("Authentication failed - Please verify:")
-                logger.error("1. Azure AD app registration is properly configured")
-                logger.error("2. Admin consent is granted for SharePoint API permissions")
-                logger.error("3. Client ID and Secret are correct")
-                logger.error("4. Application has Sites.Read.All and Sites.ReadWrite.All permissions")
-            elif response.status_code == 404:
-                logger.error("SharePoint site not found - Please verify the site URL")
-
-            logger.info("Diagnostics completed")
-        except Exception as e:
-            logger.error(f"Diagnostics failed: {str(e)}")
-
     def authenticate(self):
         """Initialize authentication using SharePoint client credentials"""
         try:
@@ -71,26 +36,36 @@ class SharePointClient:
 
             logger.info(f"Authenticating with SharePoint site: {self.site_url}")
 
-            # Create client credentials with specific scopes
+            # Create client credentials
             credentials = ClientCredential(client_id, client_secret)
 
-            # Initialize SharePoint client context with credentials and explicit scopes
+            # Initialize SharePoint client context with credentials
             self.ctx = ClientContext(self.site_url).with_credentials(credentials)
-            self.ctx.authentication_context.providers[0].scope = [
-                "https://graph.microsoft.com/.default",
-                "https://graph.microsoft.com/Sites.Read.All",
-                "https://graph.microsoft.com/Sites.ReadWrite.All"
-            ]
 
-            # Test the connection and run diagnostics if needed
-            return self._test_connection()
+            # Test connection
+            self.ctx.load(self.ctx.web)
+            self.ctx.execute_query()
+            logger.info("Successfully authenticated with SharePoint")
+            return True
 
         except Exception as e:
             logger.error(f"Authentication failed: {str(e)}")
-            if "AADSTS700016" in str(e):
-                logger.error("Application not found in tenant. Please verify the application is registered correctly.")
-            elif "AADSTS7000229" in str(e):
-                logger.error("Service principal missing. Please ensure admin consent is granted in Azure AD.")
+
+            # Add diagnostic information
+            try:
+                response = requests.get(
+                    f"{self.site_url}/_api/web",
+                    headers={'Accept': 'application/json;odata=verbose'}
+                )
+                logger.error(f"SharePoint API test - Status code: {response.status_code}")
+                if response.status_code == 401:
+                    logger.error("Authentication failed - Please verify:")
+                    logger.error("1. Azure AD app registration is properly configured")
+                    logger.error("2. Admin consent is granted for API permissions")
+                    logger.error("3. Client ID and Secret are correct")
+            except Exception as req_error:
+                logger.error(f"Diagnostic request failed: {str(req_error)}")
+
             raise
 
     def get_libraries(self):
