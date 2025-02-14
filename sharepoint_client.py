@@ -24,7 +24,7 @@ class SharePointClient:
         raise ValueError("Invalid SharePoint URL format. Expected: https://<tenant>.sharepoint.com/...")
 
     def authenticate(self):
-        """Initialize authentication using MSAL confidential client"""
+        """Initialize authentication using MSAL for delegated permissions"""
         try:
             logger.info("Starting SharePoint authentication process...")
 
@@ -38,8 +38,13 @@ class SharePointClient:
             # Define authority and scopes using specific tenant ID
             tenant_id = "f8cdef31-a31e-4b4a-93e4-5f571e91255a"  # Using specific tenant ID
             authority = f"https://login.microsoftonline.com/{tenant_id}"
-            resource = f"https://{self.tenant}.sharepoint.com"
-            scopes = [f"{resource}/.default"]
+
+            # MS Graph delegated permission scopes
+            scopes = [
+                "https://graph.microsoft.com/Sites.Read.All",
+                "https://graph.microsoft.com/Sites.ReadWrite.All",
+                "https://graph.microsoft.com/User.Read"
+            ]
 
             logger.info(f"Using client ID: {client_id[:8]}... with authority: {authority}")
             logger.info(f"Requesting scopes: {scopes}")
@@ -51,14 +56,23 @@ class SharePointClient:
                 client_credential=client_secret
             )
 
-            # Acquire token using client credentials flow
-            result = app.acquire_token_for_client(scopes=scopes)
+            # First, try to acquire token from cache
+            token = None
+            accounts = app.get_accounts()
+            if accounts:
+                token = app.acquire_token_silent(scopes, account=accounts[0])
 
-            if "access_token" in result:
+            if not token:
+                # If no token in cache, acquire new token
+                token = app.acquire_token_for_client(scopes=scopes)
+
+            if "access_token" in token:
                 # Create token response and initialize SharePoint context
                 logger.info("Successfully acquired access token")
-                token = TokenResponse(result)
-                self.ctx = ClientContext(self.site_url).with_access_token(token.access_token)
+                token_response = TokenResponse(token)
+                auth_ctx = AuthenticationContext(self.site_url)
+                auth_ctx.acquire_token_for_app(client_id, client_secret)
+                self.ctx = ClientContext(self.site_url, auth_ctx)
 
                 # Test the connection
                 self.ctx.load(self.ctx.web)
@@ -67,7 +81,7 @@ class SharePointClient:
                 logger.info("Successfully authenticated with SharePoint")
                 return True
             else:
-                error_msg = result.get("error_description", "No error description available")
+                error_msg = token.get("error_description", "No error description available")
                 logger.error(f"Failed to acquire token: {error_msg}")
                 raise Exception(f"Failed to acquire token: {error_msg}")
 
