@@ -44,12 +44,9 @@ class SharePointClient:
                 client_secret=client_secret
             )
 
-            # Get access token with specific SharePoint scopes
-            scopes = [
-                f"https://{self.tenant}.sharepoint.com/Sites.Read.All",
-                f"https://{self.tenant}.sharepoint.com/Sites.ReadWrite.All"
-            ]
-            self.access_token = credential.get_token(scopes[0]).token #Using the first scope for now.  Consider handling both.
+            # Get access token with the correct scope format for client credentials flow
+            scope = f"https://{self.tenant}.sharepoint.com/.default"
+            self.access_token = credential.get_token(scope).token
 
             # Test connection
             headers = {
