@@ -1,7 +1,9 @@
 import logging
 import os
-from office365.runtime.auth.client_credential import ClientCredential
+import re
 from office365.sharepoint.client_context import ClientContext
+from office365.runtime.auth.user_credential import UserCredential
+from office365.runtime.auth.client_credential import ClientCredential
 import requests
 
 logger = logging.getLogger(__name__)
@@ -16,7 +18,6 @@ class SharePointClient:
 
     def _extract_tenant_from_url(self, url):
         """Extract tenant name from SharePoint URL"""
-        import re
         match = re.search(r'https://([^.]+)\.sharepoint\.com', url)
         if match:
             return match.group(1)
@@ -47,8 +48,9 @@ class SharePointClient:
             if response.status_code == 401:
                 logger.error("Authentication failed - Please verify:")
                 logger.error("1. Azure AD app registration is properly configured")
-                logger.error("2. Admin consent is granted for SharePoint permissions")
+                logger.error("2. Admin consent is granted for SharePoint API permissions")
                 logger.error("3. Client ID and Secret are correct")
+                logger.error("4. Application has Sites.Read.All and Sites.ReadWrite.All permissions")
             elif response.status_code == 404:
                 logger.error("SharePoint site not found - Please verify the site URL")
 
