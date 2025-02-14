@@ -1,7 +1,7 @@
 import msal
 from office365.runtime.auth.token_response import TokenResponse
 from office365.sharepoint.client_context import ClientContext
-from office365.sharepoint.files.file import File
+from office365.runtime.auth.authentication_context import AuthenticationContext
 import logging
 import json
 
@@ -24,12 +24,10 @@ class SharePointClient:
 
             logger.info("Initializing MSAL application...")
 
-            # Initialize MSAL app with proper redirect URI for Replit
-            redirect_uri = "http://0.0.0.0:5000"  # Use the Replit app URL
+            # Initialize MSAL app without redirect URI in constructor
             app = msal.PublicClientApplication(
                 client_id,
-                authority=authority,
-                redirect_uri=redirect_uri
+                authority=authority
             )
 
             logger.info("Requesting token interactively...")
@@ -41,10 +39,11 @@ class SharePointClient:
                 "https://graph.microsoft.com/Sites.ReadWrite.All"
             ]
 
+            # Specify redirect URI in acquire_token_interactive
             result = app.acquire_token_interactive(
                 scopes,
                 prompt="select_account",  # Force account selection
-                port=5000  # Specify the port for the redirect
+                redirect_uri="http://0.0.0.0:5000"  # Specify redirect URI here
             )
 
             logger.info(f"Token acquisition result status: {'Success' if 'access_token' in result else 'Failed'}")
