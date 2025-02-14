@@ -1,11 +1,8 @@
-import msal
-from office365.runtime.auth.token_response import TokenResponse
-from office365.sharepoint.client_context import ClientContext
-from office365.runtime.auth.authentication_context import AuthenticationContext
 import logging
 import os
+from office365.runtime.auth.client_credential import ClientCredential
+from office365.sharepoint.client_context import ClientContext
 import requests
-import webbrowser
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +23,7 @@ class SharePointClient:
         raise ValueError("Invalid SharePoint URL format. Expected: https://<tenant>.sharepoint.com/...")
 
     def authenticate(self):
-        """Initialize authentication using SharePoint delegated permissions"""
+        """Initialize authentication using SharePoint client credentials"""
         try:
             logger.info("Starting SharePoint authentication process...")
 
@@ -37,45 +34,39 @@ class SharePointClient:
             if not client_id or not client_secret:
                 raise ValueError("AZURE_CLIENT_ID and AZURE_CLIENT_SECRET must be set")
 
-            # Define SharePoint-specific endpoints
-            tenant_id = "f8cdef31-a31e-4b4a-93e4-5f571e91255a"
-            authority_url = f"https://login.microsoftonline.com/{tenant_id}"
-            resource = f"https://{self.tenant}.sharepoint.com"
-
             logger.info(f"Authenticating with SharePoint site: {self.site_url}")
-            logger.info(f"Using authority URL: {authority_url}")
 
-            # Create authentication context
-            auth_ctx = AuthenticationContext(self.site_url)
+            # Create client credentials
+            credentials = ClientCredential(client_id, client_secret)
 
-            # Set up with client credentials
-            if auth_ctx.acquire_token_for_user(client_id, client_secret):
-                self.ctx = ClientContext(self.site_url, auth_ctx)
+            # Initialize SharePoint client context with credentials
+            try:
+                self.ctx = ClientContext(self.site_url).with_credentials(credentials)
 
+                # Test connection
+                logger.info("Testing connection to SharePoint...")
+                self.ctx.load(self.ctx.web)
+                self.ctx.execute_query()
+
+                logger.info("Successfully authenticated with SharePoint")
+                return True
+
+            except Exception as e:
+                logger.error(f"Failed to connect to SharePoint site: {str(e)}")
+                # Diagnostic information
                 try:
-                    # Test connection
-                    self.ctx.load(self.ctx.web)
-                    self.ctx.execute_query()
-                    logger.info("Successfully connected to SharePoint site")
-                    return True
-                except Exception as e:
-                    logger.error(f"Failed to connect to SharePoint site: {str(e)}")
-                    headers = {
-                        'Accept': 'application/json;odata=verbose'
-                    }
-                    # Add diagnostic information
-                    logger.error("Attempting direct REST API test...")
+                    headers = {'Accept': 'application/json;odata=verbose'}
                     response = requests.get(f"{self.site_url}/_api/web", headers=headers)
                     logger.error(f"REST API test response: {response.status_code}")
                     logger.error(f"REST API response content: {response.text}")
-                    raise
-            else:
-                raise Exception("Failed to acquire token for user")
+                except Exception as req_error:
+                    logger.error(f"Diagnostic request failed: {str(req_error)}")
+                raise
 
         except Exception as e:
             logger.error(f"Authentication failed: {str(e)}")
-            if "AADSTS7000229" in str(e):
-                logger.error("Service Principal not found. Please ensure the app is properly registered in Azure AD")
+            if "AADSTS700016" in str(e):
+                logger.error("Application not found in tenant. Please verify the application is registered correctly.")
             raise
 
     def get_libraries(self):
