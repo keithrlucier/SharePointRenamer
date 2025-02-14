@@ -36,8 +36,13 @@ class SharePointClient:
                 raise ValueError("AZURE_CLIENT_ID and AZURE_CLIENT_SECRET must be set")
 
             # Define authority and scopes
-            authority = f"https://login.microsoftonline.com/{self.tenant}.onmicrosoft.com"
-            scopes = [f"https://{self.tenant}.sharepoint.com/.default"]
+            # Using organizations endpoint instead of tenant-specific
+            authority = "https://login.microsoftonline.com/organizations"
+            resource = f"https://{self.tenant}.sharepoint.com"
+            scopes = [f"{resource}/.default"]
+
+            logger.info(f"Initializing MSAL application with authority: {authority}")
+            logger.info(f"Using scopes: {scopes}")
 
             # Initialize confidential client application
             app = msal.ConfidentialClientApplication(
