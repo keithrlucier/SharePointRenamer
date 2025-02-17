@@ -60,65 +60,74 @@ def show_file_manager(library_name):
                 files_by_path[parent_path] = []
             files_by_path[parent_path].append(file)
 
-        # Bulk rename controls
+        # Bulk rename controls in sidebar
         st.sidebar.write("### Bulk Rename")
-        st.sidebar.text_input(
+        rename_pattern = st.sidebar.text_input(
             "Rename Pattern",
-            value=st.session_state.rename_pattern,
-            help="Use patterns like: prefix_{name}_{ext}",
-            key="rename_pattern_input",
-            on_change=lambda: setattr(st.session_state, 'rename_pattern', st.session_state.rename_pattern_input)
+            value="",
+            help="Use patterns like: prefix_{name}{ext}"
         )
 
-        if st.sidebar.button("Preview Rename"):
-            preview_renames = []
-            for file_id in st.session_state.selected_files:
-                file = next((f for f in sum(files_by_path.values(), []) if f['Id'] == file_id), None)
-                if file:
-                    new_name = apply_rename_pattern(file['Name'], st.session_state.rename_pattern)
-                    preview_renames.append({
+        # Add select all button
+        if st.sidebar.button("Select All Files"):
+            st.session_state.selected_files = {
+                file['Id']: file 
+                for files in files_by_path.values() 
+                for file in files
+            }
+            st.rerun()
+
+        # Add clear selection button
+        if st.sidebar.button("Clear Selection"):
+            st.session_state.selected_files = {}
+            st.rerun()
+
+        # Direct bulk rename button
+        if st.sidebar.button("Rename Selected Files") and rename_pattern and st.session_state.selected_files:
+            rename_operations = []
+            for file_id, file in st.session_state.selected_files.items():
+                new_name = apply_rename_pattern(file['Name'], rename_pattern)
+                if validate_filename(new_name):
+                    rename_operations.append({
                         'old_name': file['Name'],
                         'new_name': new_name,
                         'file_id': file_id
                     })
-            st.session_state.preview_renames = preview_renames
 
-        if st.session_state.preview_renames:
-            st.sidebar.write("### Preview Changes")
-            for rename in st.session_state.preview_renames:
-                st.sidebar.text(f"{rename['old_name']} → {rename['new_name']}")
-
-            if st.sidebar.button("Apply Rename"):
-                with st.spinner("Renaming files..."):
+            if rename_operations:
+                with st.spinner(f"Renaming {len(rename_operations)} files..."):
                     results = st.session_state.client.bulk_rename_files(
                         library_name,
-                        st.session_state.preview_renames
+                        rename_operations
                     )
 
-                    # Show results
+                    # Show results summary
                     success_count = sum(1 for r in results if r['success'])
-                    if success_count == len(results):
-                        st.success(f"Successfully renamed {success_count} files!")
-                    else:
-                        st.warning(f"Renamed {success_count} out of {len(results)} files.")
-                        for result in results:
-                            if not result['success']:
-                                st.error(f"Failed to rename {result['old_name']}: {result.get('error', 'Unknown error')}")
+                    if success_count > 0:
+                        st.success(f"Successfully renamed {success_count} out of {len(results)} files")
 
-                    # Clear selections and preview
+                    # Show errors in expandable section if any
+                    failed = [r for r in results if not r['success']]
+                    if failed:
+                        with st.expander("Show Failed Operations"):
+                            for failure in failed:
+                                st.error(f"Failed to rename {failure['old_name']}: {failure.get('error', 'Unknown error')}")
+
                     st.session_state.selected_files = {}
-                    st.session_state.preview_renames = []
                     time.sleep(1)
                     st.rerun()
 
+        # Display total selected files count
+        st.sidebar.write(f"Selected: {len(st.session_state.selected_files)} files")
+
         # Display files grouped by folders
         for folder_name, folder_files in files_by_path.items():
-            with st.expander(f"📁 {folder_name}", expanded=folder_name == 'Root'):
+            with st.expander(f"📁 {folder_name} ({len(folder_files)} files)", expanded=folder_name == 'Root'):
                 for file in folder_files:
-                    col1, col2, col3 = st.columns([0.5, 2.5, 1])
+                    col1, col2 = st.columns([0.5, 3.5])
 
                     with col1:
-                        # Checkbox for bulk selection
+                        # Checkbox for selection
                         is_selected = st.checkbox("", key=f"select_{file['Id']}", 
                                                value=file['Id'] in st.session_state.selected_files)
                         if is_selected:
@@ -130,10 +139,6 @@ def show_file_manager(library_name):
                         st.write(f"📄 {file['Name']}")
                         if len(file['Name']) > 128:
                             st.warning("Long filename!")
-
-                    with col3:
-                        if st.button(f"Rename", key=f"rename_{file['Id']}"):
-                            show_rename_form(library_name, file)
 
     except Exception as e:
         st.error(f"Error loading files: {str(e)}")
