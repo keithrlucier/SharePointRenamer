@@ -75,15 +75,28 @@ def show_file_manager(library_name):
                 for files in files_by_path.values() 
                 for file in files
             }
+            logger.info(f"Selected all files: {len(st.session_state.selected_files)} total")
             st.rerun()
 
         # Add clear selection button
         if st.sidebar.button("Clear Selection"):
             st.session_state.selected_files = {}
+            logger.info("Cleared all file selections")
             st.rerun()
 
         # Direct bulk rename button
-        if st.sidebar.button("Rename Selected Files") and rename_pattern and st.session_state.selected_files:
+        if st.sidebar.button("Rename Selected Files"):
+            logger.info(f"Attempting bulk rename with pattern: {rename_pattern}")
+            logger.info(f"Selected files count: {len(st.session_state.selected_files)}")
+
+            if not rename_pattern:
+                st.error("Please enter a rename pattern first")
+                return
+
+            if not st.session_state.selected_files:
+                st.error("Please select files to rename first")
+                return
+
             rename_operations = []
             for file_id, file in st.session_state.selected_files.items():
                 new_name = apply_rename_pattern(file['Name'], rename_pattern)
@@ -93,9 +106,11 @@ def show_file_manager(library_name):
                         'new_name': new_name,
                         'file_id': file_id
                     })
+                    logger.info(f"Added rename operation: {file['Name']} -> {new_name}")
 
             if rename_operations:
                 with st.spinner(f"Renaming {len(rename_operations)} files..."):
+                    logger.info(f"Executing {len(rename_operations)} rename operations")
                     results = st.session_state.client.bulk_rename_files(
                         library_name,
                         rename_operations
@@ -105,17 +120,23 @@ def show_file_manager(library_name):
                     success_count = sum(1 for r in results if r['success'])
                     if success_count > 0:
                         st.success(f"Successfully renamed {success_count} out of {len(results)} files")
+                        logger.info(f"Successfully renamed {success_count} out of {len(results)} files")
 
                     # Show errors in expandable section if any
                     failed = [r for r in results if not r['success']]
                     if failed:
                         with st.expander("Show Failed Operations"):
                             for failure in failed:
-                                st.error(f"Failed to rename {failure['old_name']}: {failure.get('error', 'Unknown error')}")
+                                error_msg = f"Failed to rename {failure['old_name']}: {failure.get('error', 'Unknown error')}"
+                                st.error(error_msg)
+                                logger.error(error_msg)
 
                     st.session_state.selected_files = {}
                     time.sleep(1)
                     st.rerun()
+            else:
+                st.error("No valid rename operations could be created. Check the filename pattern.")
+                logger.error("No valid rename operations could be created")
 
         # Display total selected files count
         st.sidebar.write(f"Selected: {len(st.session_state.selected_files)} files")
