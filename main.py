@@ -5,6 +5,7 @@ from utils import setup_logging, validate_filename, sanitize_filename
 import time
 import re
 import os
+from setup import show_setup_guide
 
 # Setup logging
 setup_logging()
@@ -22,6 +23,8 @@ def initialize_session_state():
         st.session_state['rename_pattern'] = ""
     if 'preview_renames' not in st.session_state:
         st.session_state['preview_renames'] = []
+    if 'show_setup' not in st.session_state:
+        st.session_state['show_setup'] = False
 
 def apply_rename_pattern(filename, pattern):
     """Apply rename pattern to filename"""
@@ -200,7 +203,7 @@ def show_file_manager(library_name):
                     with col1:
                         # Checkbox for selection
                         is_selected = st.checkbox("", key=f"select_{file['Id']}", 
-                                                   value=file['Id'] in st.session_state.selected_files)
+                                                    value=file['Id'] in st.session_state.selected_files)
                         if is_selected:
                             st.session_state.selected_files[file['Id']] = file
                         elif file['Id'] in st.session_state.selected_files:
@@ -268,9 +271,24 @@ def authenticate():
     """Handle SharePoint authentication"""
     st.write("### SharePoint Authentication")
 
+    # Add setup guide button
+    if st.button("📚 View Setup Guide"):
+        st.session_state['show_setup'] = True
+        st.rerun()
+
+    if st.session_state.get('show_setup', False):
+        show_setup_guide()
+        if st.button("← Back to Login"):
+            st.session_state['show_setup'] = False
+            st.rerun()
+        return
+
     with st.form("authentication_form"):
         site_url = st.text_input("SharePoint Site URL", 
-                                 help="Enter the full SharePoint site URL (e.g., https://your-tenant.sharepoint.com/sites/your-site)")
+                                help="Enter the full SharePoint site URL (e.g., https://your-tenant.sharepoint.com/sites/your-site)")
+
+        st.info("Make sure you have configured your Azure AD credentials in the Setup Guide before connecting.")
+
         submit = st.form_submit_button("Connect")
 
         if submit and site_url:
