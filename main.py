@@ -62,11 +62,45 @@ def show_file_manager(library_name):
 
         # Bulk rename controls in sidebar
         st.sidebar.write("### Bulk Rename")
-        rename_pattern = st.sidebar.text_input(
-            "Rename Pattern",
-            value="",
-            help="Use patterns like: prefix_{name}{ext}"
+
+        # Add pattern selection
+        pattern_type = st.sidebar.radio(
+            "Choose Pattern Type",
+            options=[
+                "Custom Pattern",
+                "Add Prefix",
+                "Add Case Number",
+                "Add Date Prefix"
+            ]
         )
+
+        if pattern_type == "Custom Pattern":
+            rename_pattern = st.sidebar.text_input(
+                "Rename Pattern",
+                value="{name}{ext}",
+                help="""
+                Use these placeholders:
+                - {name} = original filename without extension
+                - {ext} = original extension (including dot)
+
+                Examples:
+                - prefix_{name}{ext}
+                - CASE123_{name}{ext}
+                - {name}_v1{ext}
+                """
+            )
+        elif pattern_type == "Add Prefix":
+            prefix = st.sidebar.text_input("Enter Prefix", value="DOC_")
+            rename_pattern = f"{prefix}{{name}}{{ext}}"
+        elif pattern_type == "Add Case Number":
+            case_number = st.sidebar.text_input("Enter Case Number", value="CASE123_")
+            rename_pattern = f"{case_number}{{name}}{{ext}}"
+        elif pattern_type == "Add Date Prefix":
+            import datetime
+            today = datetime.datetime.now().strftime("%Y%m%d_")
+            rename_pattern = f"{today}{{name}}{{ext}}"
+
+        st.sidebar.info(f"Pattern Preview: {rename_pattern}")
 
         # Add select all button
         if st.sidebar.button("Select All Files"):
@@ -150,7 +184,7 @@ def show_file_manager(library_name):
                     with col1:
                         # Checkbox for selection
                         is_selected = st.checkbox("", key=f"select_{file['Id']}", 
-                                               value=file['Id'] in st.session_state.selected_files)
+                                                   value=file['Id'] in st.session_state.selected_files)
                         if is_selected:
                             st.session_state.selected_files[file['Id']] = file
                         elif file['Id'] in st.session_state.selected_files:
