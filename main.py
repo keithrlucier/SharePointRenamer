@@ -77,36 +77,47 @@ def show_library_selector():
             st.rerun()
 
 def show_file_manager(library_name):
-    """Display file management interface"""
-    try:
-        with st.spinner("Loading files..."):
-            files = st.session_state.client.get_files(library_name)
+        """Display file management interface"""
+        try:
+            with st.spinner("Loading files..."):
+                files = st.session_state.client.get_files(library_name)
 
-        st.write("### Files in Library")
-        if not files:
-            st.info("No files found in this library.")
-            return
+            st.write("### Files in Library")
+            if not files:
+                st.info("No files found in this library.")
+                return
 
-        for file in files:
-            col1, col2, col3 = st.columns([3, 1, 1])
+            # Group files by parent path
+            files_by_path = {}
+            for file in files:
+                parent_path = file.get('ParentPath', '').split('/')[-1] or 'Root'
+                if parent_path not in files_by_path:
+                    files_by_path[parent_path] = []
+                files_by_path[parent_path].append(file)
 
-            with col1:
-                st.write(file['Name'])
+            # Display files grouped by folders
+            for folder_name, folder_files in files_by_path.items():
+                with st.expander(f"📁 {folder_name}", expanded=folder_name == 'Root'):
+                    for file in folder_files:
+                        col1, col2, col3 = st.columns([3, 1, 1])
 
-            with col2:
-                if len(file['Name']) > 128:  # Warning for long filenames
-                    st.warning("Long filename!")
+                        with col1:
+                            st.write(f"📄 {file['Name']}")
 
-            with col3:
-                if st.button(f"Rename {file['Name']}", key=file['Id']):
-                    show_rename_form(library_name, file)
+                        with col2:
+                            if len(file['Name']) > 128:  # Warning for long filenames
+                                st.warning("Long filename!")
 
-    except Exception as e:
-        st.error(f"Error loading files: {str(e)}")
-        logger.error(f"Error loading files: {str(e)}")
-        if "authentication" in str(e).lower():
-            st.session_state.authenticated = False
-            st.rerun()
+                        with col3:
+                            if st.button(f"Rename {file['Name']}", key=file['Id']):
+                                show_rename_form(library_name, file)
+
+        except Exception as e:
+            st.error(f"Error loading files: {str(e)}")
+            logger.error(f"Error loading files: {str(e)}")
+            if "authentication" in str(e).lower():
+                st.session_state.authenticated = False
+                st.rerun()
 
 def show_rename_form(library_name, file):
     """Display rename form for a file"""

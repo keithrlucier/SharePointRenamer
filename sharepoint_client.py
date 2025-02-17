@@ -155,7 +155,7 @@ class SharePointClient:
             raise
 
     def get_files(self, library_name):
-        """Get all files in a library using Microsoft Graph API"""
+        """Get all files in a library recursively using Microsoft Graph API"""
         try:
             if not self.access_token:
                 self.authenticate()
@@ -172,7 +172,6 @@ class SharePointClient:
             drives_url = f"https://graph.microsoft.com/v1.0/{site_id}/drives"
 
             response = requests.get(drives_url, headers=headers)
-
             if response.status_code != 200:
                 raise Exception(f"Failed to get drives. Status code: {response.status_code}")
 
@@ -186,24 +185,48 @@ class SharePointClient:
             if not drive_id:
                 raise Exception(f"Library '{library_name}' not found")
 
-            # Get files from the drive
-            files_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/root/children"
-            response = requests.get(files_url, headers=headers)
+            def get_items_recursive(folder_id='root'):
+                """Recursively get all items from a folder"""
+                items = []
 
-            if response.status_code == 200:
-                data = response.json()
-                files = []
-                for item in data.get('value', []):
-                    if 'file' in item:
-                        files.append({
-                            'Id': item['id'],
-                            'Name': item['name'],
-                            'Path': item['webUrl']
-                        })
-                return files
-            else:
-                logger.error(f"Failed to get files. Response: {response.text}")
-                raise Exception(f"Failed to get files. Status code: {response.status_code}")
+                # Get items from current folder
+                items_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{folder_id}/children"
+                logger.info(f"Fetching items from folder: {items_url}")
+
+                try:
+                    response = requests.get(items_url, headers=headers)
+                    if response.status_code == 200:
+                        folder_items = response.json().get('value', [])
+
+                        for item in folder_items:
+                            if 'file' in item:
+                                # This is a file
+                                items.append({
+                                    'Id': item['id'],
+                                    'Name': item['name'],
+                                    'Path': item['webUrl'],
+                                    'ParentPath': item.get('parentReference', {}).get('path', ''),
+                                    'Type': 'file'
+                                })
+                            elif 'folder' in item:
+                                # This is a folder, recurse into it
+                                logger.info(f"Found folder: {item['name']}, recursing...")
+                                folder_items = get_items_recursive(item['id'])
+                                items.extend(folder_items)
+                    else:
+                        logger.error(f"Failed to get items. Status code: {response.status_code}")
+                        logger.error(f"Response: {response.text}")
+                except Exception as e:
+                    logger.error(f"Error fetching items: {str(e)}")
+
+                return items
+
+            # Start recursive file enumeration from root
+            logger.info(f"Starting recursive file enumeration for library: {library_name}")
+            all_items = get_items_recursive()
+            logger.info(f"Found {len(all_items)} total items in {library_name}")
+
+            return all_items
 
         except Exception as e:
             logger.error(f"Failed to get files from library {library_name}: {str(e)}")
