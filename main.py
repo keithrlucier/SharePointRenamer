@@ -25,6 +25,16 @@ def initialize_session_state():
 
 def apply_rename_pattern(filename, pattern):
     """Apply rename pattern to filename"""
+    # Handle "Extract Last Part" pattern type
+    if pattern == "__extract_last_part__":
+        # Split by various delimiters and get the last part
+        delimiters = [' - ', '-', '_']
+        name = filename
+        for delimiter in delimiters:
+            if delimiter in name:
+                name = name.split(delimiter)[-1].strip()
+        return name
+
     # Extract the file extension
     name, ext = os.path.splitext(filename)
 
@@ -36,8 +46,6 @@ def apply_rename_pattern(filename, pattern):
 
     # {ext} - original extension including dot
     new_name = new_name.replace('{ext}', ext)
-
-    # Add more pattern replacements here
 
     return new_name
 
@@ -67,6 +75,8 @@ def show_file_manager(library_name):
         pattern_type = st.sidebar.radio(
             "Choose Pattern Type",
             options=[
+                "Extract Last Part",
+                "No Pattern (Keep Original)",
                 "Custom Pattern",
                 "Add Prefix",
                 "Add Case Number",
@@ -74,7 +84,12 @@ def show_file_manager(library_name):
             ]
         )
 
-        if pattern_type == "Custom Pattern":
+        # Initialize rename pattern based on selection
+        if pattern_type == "Extract Last Part":
+            rename_pattern = "__extract_last_part__"
+        elif pattern_type == "No Pattern (Keep Original)":
+            rename_pattern = "{name}{ext}"
+        elif pattern_type == "Custom Pattern":
             rename_pattern = st.sidebar.text_input(
                 "Rename Pattern",
                 value="{name}{ext}",
@@ -100,7 +115,8 @@ def show_file_manager(library_name):
             today = datetime.datetime.now().strftime("%Y%m%d_")
             rename_pattern = f"{today}{{name}}{{ext}}"
 
-        st.sidebar.info(f"Pattern Preview: {rename_pattern}")
+        if pattern_type not in ["Extract Last Part"]:
+            st.sidebar.info(f"Pattern Preview: {rename_pattern}")
 
         # Add select all button
         if st.sidebar.button("Select All Files"):
