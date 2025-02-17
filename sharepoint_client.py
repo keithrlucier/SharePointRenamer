@@ -3,6 +3,7 @@ import os
 import re
 from azure.identity import ClientSecretCredential
 import requests
+from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
 
@@ -12,6 +13,7 @@ class SharePointClient:
         self.site_url = site_url.rstrip('/')  # Remove trailing slash
         self.ctx = None
         self.tenant = self._extract_tenant_from_url(site_url)
+        self.site_path = self._extract_site_path(site_url)
         self.access_token = None
         logger.info(f"Initialized SharePoint client for site: {site_url}")
 
@@ -21,6 +23,14 @@ class SharePointClient:
         if match:
             return match.group(1)
         raise ValueError("Invalid SharePoint URL format. Expected: https://<tenant>.sharepoint.com/...")
+
+    def _extract_site_path(self, url):
+        """Extract the site path from SharePoint URL"""
+        parsed = urlparse(url)
+        path = parsed.path.rstrip('/')
+        if not path:
+            return ''
+        return path
 
     def authenticate(self):
         """Initialize authentication using Azure AD credentials"""
@@ -67,8 +77,11 @@ class SharePointClient:
                 'Accept': 'application/json'
             }
 
-            # Use Graph API to verify site access
-            site_id = f"sites/{self.tenant}.sharepoint.com:/"
+            # Construct the site ID using the full path
+            host_part = f"{self.tenant}.sharepoint.com"
+            site_path = self.site_path if self.site_path else ''
+            site_id = f"sites/{host_part}{site_path}"
+
             test_url = f"https://graph.microsoft.com/v1.0/{site_id}"
             logger.info(f"Testing SharePoint connection via Graph API at: {test_url}")
 
@@ -118,14 +131,21 @@ class SharePointClient:
                 'Accept': 'application/json'
             }
 
-            site_id = f"sites/{self.tenant}.sharepoint.com:/"
+            # Construct the site ID using the full path
+            host_part = f"{self.tenant}.sharepoint.com"
+            site_path = self.site_path if self.site_path else ''
+            site_id = f"sites/{host_part}{site_path}"
+
             drives_url = f"https://graph.microsoft.com/v1.0/{site_id}/drives"
+            logger.info(f"Fetching libraries from: {drives_url}")
 
             response = requests.get(drives_url, headers=headers)
 
             if response.status_code == 200:
                 data = response.json()
-                return [drive['name'] for drive in data.get('value', [])]
+                libraries = [drive['name'] for drive in data.get('value', [])]
+                logger.info(f"Found {len(libraries)} libraries")
+                return libraries
             else:
                 logger.error(f"Failed to get libraries. Response: {response.text}")
                 raise Exception(f"Failed to get libraries. Status code: {response.status_code}")
@@ -146,7 +166,9 @@ class SharePointClient:
             }
 
             # First get the drive ID for the library
-            site_id = f"sites/{self.tenant}.sharepoint.com:/"
+            host_part = f"{self.tenant}.sharepoint.com"
+            site_path = self.site_path if self.site_path else ''
+            site_id = f"sites/{host_part}{site_path}"
             drives_url = f"https://graph.microsoft.com/v1.0/{site_id}/drives"
 
             response = requests.get(drives_url, headers=headers)
@@ -200,7 +222,9 @@ class SharePointClient:
             }
 
             # First get the drive ID for the library
-            site_id = f"sites/{self.tenant}.sharepoint.com:/"
+            host_part = f"{self.tenant}.sharepoint.com"
+            site_path = self.site_path if self.site_path else ''
+            site_id = f"sites/{host_part}{site_path}"
             drives_url = f"https://graph.microsoft.com/v1.0/{site_id}/drives"
 
             response = requests.get(drives_url, headers=headers)
