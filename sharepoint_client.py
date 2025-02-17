@@ -49,10 +49,9 @@ class SharePointClient:
                 client_secret=client_secret
             )
 
-            # Request token for SharePoint resource with proper scope
-            resource = f"00000003-0000-0ff1-ce00-000000000000/{self.tenant}.sharepoint.com@{tenant_id}"
-            scope = f"{resource}/.default"
-            logger.info(f"Requesting token for SharePoint resource: {resource}")
+            # Request token for SharePoint with correct scope format
+            scope = f"https://{self.tenant}.sharepoint.com/.default"
+            logger.info(f"Requesting token for scope: {scope}")
 
             try:
                 token_response = credential.get_token(scope)
