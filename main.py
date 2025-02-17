@@ -33,7 +33,7 @@ def authenticate():
                         st.session_state.authenticated = True
                         st.success("Successfully connected to SharePoint!")
                         time.sleep(2)
-                        st.experimental_rerun()
+                        st.rerun()
             except Exception as e:
                 st.error(f"Authentication failed: {str(e)}")
                 logger.error(f"Authentication failed: {str(e)}")
@@ -74,7 +74,7 @@ def show_library_selector():
         logger.error(f"Error loading libraries: {str(e)}")
         if "authentication" in str(e).lower():
             st.session_state.authenticated = False
-            st.experimental_rerun()
+            st.rerun()
 
 def show_file_manager(library_name):
     """Display file management interface"""
@@ -106,7 +106,7 @@ def show_file_manager(library_name):
         logger.error(f"Error loading files: {str(e)}")
         if "authentication" in str(e).lower():
             st.session_state.authenticated = False
-            st.experimental_rerun()
+            st.rerun()
 
 def show_rename_form(library_name, file):
     """Display rename form for a file"""
@@ -131,7 +131,7 @@ def show_rename_form(library_name, file):
                     time.sleep(1)  # Allow SharePoint to process
                     st.success(f"File renamed to: {sanitized_name}")
                     logger.info(f"File renamed from {file['Name']} to {sanitized_name}")
-                    st.experimental_rerun()
+                    st.rerun()
             except Exception as e:
                 st.error(f"Error renaming file: {str(e)}")
                 logger.error(f"Error renaming file: {str(e)}")
@@ -150,7 +150,7 @@ def main():
         if st.sidebar.button("Logout"):
             st.session_state.authenticated = False
             st.session_state.client = None
-            st.experimental_rerun()
+            st.rerun()
 
         show_library_selector()
 
