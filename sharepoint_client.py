@@ -49,12 +49,18 @@ class SharePointClient:
                 client_secret=client_secret
             )
 
-            # Request token for SharePoint with correct scope format
-            scope = f"https://{self.tenant}.sharepoint.com/.default"
-            logger.info(f"Requesting token for scope: {scope}")
+            # Request token with specific resource identifier for SharePoint
+            resource = f"https://{self.tenant}.sharepoint.com"
+            scopes = [
+                "https://graph.microsoft.com/.default",
+                f"{resource}/Sites.Read.All",
+                f"{resource}/Sites.ReadWrite.All"
+            ]
+
+            logger.info(f"Requesting token for scopes: {scopes}")
 
             try:
-                token_response = credential.get_token(scope)
+                token_response = credential.get_token(scopes[0])  # Start with Graph API scope
                 self.access_token = token_response.token
                 logger.info("Token acquired successfully")
             except Exception as token_error:
@@ -65,7 +71,9 @@ class SharePointClient:
             headers = {
                 'Authorization': f'Bearer {self.access_token}',
                 'Accept': 'application/json;odata=verbose',
-                'Content-Type': 'application/json;odata=verbose'
+                'Content-Type': 'application/json;odata=verbose',
+                'X-FORMS_BASED_AUTH_ACCEPTED': 'f',
+                'X-RequestForceAuthentication': 'true'
             }
 
             test_url = f"{self.site_url}/_api/web"
