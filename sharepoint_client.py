@@ -297,3 +297,85 @@ class SharePointClient:
         except Exception as e:
             logger.error(f"Failed to rename file {old_name}: {str(e)}")
             raise
+
+    def bulk_rename_files(self, library_name, rename_operations):
+        """
+        Perform bulk rename operations on files
+        Args:
+            library_name: Name of the SharePoint library
+            rename_operations: List of dicts with {'old_name': str, 'new_name': str, 'file_id': str}
+        """
+        try:
+            if not self.access_token:
+                self.authenticate()
+
+            headers = {
+                'Authorization': f'Bearer {self.access_token}',
+                'Accept': 'application/json',
+                'Content-Type': 'application/json'
+            }
+
+            # Get drive ID for the library
+            host_part = f"{self.tenant}.sharepoint.com"
+            site_path = self.site_path if self.site_path else ''
+            site_id = f"sites/{host_part}{site_path}"
+            drives_url = f"https://graph.microsoft.com/v1.0/{site_id}/drives"
+
+            response = requests.get(drives_url, headers=headers)
+            if response.status_code != 200:
+                raise Exception(f"Failed to get drives. Status code: {response.status_code}")
+
+            drives_data = response.json()
+            drive_id = None
+            for drive in drives_data.get('value', []):
+                if drive['name'] == library_name:
+                    drive_id = drive['id']
+                    break
+
+            if not drive_id:
+                raise Exception(f"Library '{library_name}' not found")
+
+            # Process each rename operation
+            results = []
+            for operation in rename_operations:
+                try:
+                    file_id = operation['file_id']
+                    new_name = operation['new_name']
+                    old_name = operation['old_name']
+
+                    # Rename the file
+                    update_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}"
+                    update_data = {'name': new_name}
+
+                    response = requests.patch(update_url, headers=headers, json=update_data)
+
+                    if response.status_code not in [200, 201]:
+                        logger.error(f"Failed to rename file {old_name}. Response: {response.text}")
+                        results.append({
+                            'old_name': old_name,
+                            'new_name': new_name,
+                            'success': False,
+                            'error': f"Status code: {response.status_code}"
+                        })
+                    else:
+                        logger.info(f"Successfully renamed {old_name} to {new_name}")
+                        results.append({
+                            'old_name': old_name,
+                            'new_name': new_name,
+                            'success': True
+                        })
+
+                except Exception as e:
+                    logger.error(f"Error renaming file {operation['old_name']}: {str(e)}")
+                    results.append({
+                        'old_name': operation['old_name'],
+                        'new_name': operation['new_name'],
+                        'success': False,
+                        'error': str(e)
+                    })
+
+            return results
+
+        except Exception as e:
+            logger.error(f"Failed to perform bulk rename: {str(e)}")
+            raise
