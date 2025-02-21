@@ -636,183 +636,178 @@ def show_admin_panel():
     """Display admin panel"""
     st.write("### Admin Panel")
 
-    # Add tabs for different admin functions
-    users_tab, tenants_tab, credentials_tab = st.tabs(["Users", "Tenants", "Credentials"])
+    # Use Flask app context for database operations
+    with app.app_context():
+        # Add tabs for different admin functions
+        users_tab, tenants_tab, credentials_tab = st.tabs(["Users", "Tenants", "Credentials"])
 
-    with users_tab:
-        st.write("#### Manage Users")
-        users = User.query.all()
-        admin_count = User.query.filter_by(is_admin=True).count()
+        with users_tab:
+            st.write("#### Manage Users")
+            users = User.query.all()
+            admin_count = User.query.filter_by(is_admin=True).count()
 
-        # Create new user
-        with st.expander("Create New User"):
-            with st.form("create_user"):
-                email = st.text_input("Email")
-                password = st.text_input("Password", type="password")
-                is_admin = st.checkbox("Is Admin")
-                tenant = st.selectbox(
-                    "Select Tenant",
-                    options=Tenant.query.all(),
-                    format_func=lambda x: x.name
-                )
+            # Create new user
+            with st.expander("Create New User"):
+                with st.form("create_user"):
+                    email = st.text_input("Email")
+                    password = st.text_input("Password", type="password")
+                    is_admin = st.checkbox("Is Admin")
+                    tenant = st.selectbox(
+                        "Select Tenant",
+                        options=Tenant.query.all(),
+                        format_func=lambda x: x.name
+                    )
 
-                if st.form_submit_button("Create User"):
-                    try:
-                        user = User(
-                            email=email,
-                            is_admin=is_admin,
-                            tenant_id=tenant.id
-                        )
-                        user.set_password(password)
-                        db.session.add(user)
+                    if st.form_submit_button("Create User"):
+                        try:
+                            user = User(
+                                email=email,
+                                is_admin=is_admin,
+                                tenant_id=tenant.id
+                            )
+                            user.set_password(password)
+                            db.session.add(user)
+                            db.session.commit()
+                            st.success("User created successfully!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Error creating user: {str(e)}")
+
+            # List existing users
+            st.write("#### Existing Users")
+
+            for user in users:
+                with st.expander(f"User: {user.email}"):
+                    st.write(f"Admin: {'Yes' if user.is_admin else 'No'}")
+                    st.write(f"MFA Enabled: {'Yes' if user.mfa_enabled else 'No'}")
+                    st.write(f"Tenant: {user.tenant.name if user.tenant else 'None'}")
+
+                    if st.button("Reset MFA", key=f"reset_mfa_{user.id}"):
+                        user.mfa_secret = None
+                        user.mfa_enabled = False
                         db.session.commit()
-                        st.success("User created successfully!")
+                        st.success("MFA reset successfully!")
                         st.rerun()
-                    except Exception as e:
-                        st.error(f"Error creating user: {str(e)}")
 
-        # List existing users
-        st.write("#### Existing Users")
+                    # Check if this is the last admin
+                    is_last_admin = user.is_admin and admin_count <= 1
+                    can_delete = not is_last_admin
 
-        for user in users:
-            with st.expander(f"User: {user.email}"):
-                st.write(f"Admin: {'Yes' if user.is_admin else 'No'}")
-                st.write(f"MFA Enabled: {'Yes' if user.mfa_enabled else 'No'}")
-                st.write(f"Tenant: {user.tenant.name if user.tenant else 'None'}")
-
-                if st.button("Reset MFA", key=f"reset_mfa_{user.id}"):
-                    user.mfa_secret = None
-                    user.mfa_enabled = False
-                    db.session.commit()
-                    st.success("MFA reset successfully!")
-                    st.rerun()
-
-                # Check if this is the last admin
-                is_last_admin = user.is_admin and admin_count <= 1
-                can_delete = not is_last_admin
-
-                # Add delete button with appropriate warning
-                delete_button = st.button(
-                    "Delete User",
-                    key=f"delete_user_{user.id}",
-                    disabled=not can_delete
-                )
-
-                if delete_button:
-                    try:
-                        # Double-check admin count before deletion
-                        if user.is_admin:
+                    # Add delete button with appropriate warning
+                    if st.button("Delete User", key=f"delete_user_{user.id}", disabled=not can_delete):
+                        try:
+                            # Double-check admin count before deletion
                             current_admin_count = User.query.filter_by(is_admin=True).count()
-                            if current_admin_count <= 1:
+                            if user.is_admin and current_admin_count <= 1:
                                 st.error("Cannot delete the last admin user!")
-                                return
+                            else:
+                                # Proceed with deletion
+                                db.session.delete(user)
+                                db.session.commit()
+                                logger.info(f"User deleted successfully: {user.email}")
+                                st.success("User deleted successfully!")
+                                time.sleep(1)
+                                st.rerun()
+                        except Exception as e:
+                            logger.error(f"Error deleting user: {str(e)}")
+                            st.error(f"Error deleting user: {str(e)}")
 
-                        # Proceed with deletion
-                        db.session.delete(user)
+                    # Show appropriate warning message
+                    if is_last_admin:
+                        st.warning("This is the last admin user - create another admin user before deleting this one")
+                    elif user.is_admin:
+                        st.info("You can delete this admin user because other admin users exist")
+
+        with tenants_tab:
+            st.write("#### Manage Tenants")
+            tenants = Tenant.query.all()
+
+            # Create new tenant
+            with st.expander("Create New Tenant"):
+                with st.form("create_tenant"):
+                    name = st.text_input("Tenant Name")
+                    subscription_status = st.selectbox(
+                        "Subscription Status",
+                        options=['trial', 'active', 'cancelled']
+                    )
+                    subscription_end = st.date_input(
+                        "Subscription End Date",
+                        value=datetime.now() + timedelta(days=30)
+                    )
+
+                    if st.form_submit_button("Create Tenant"):
+                        try:
+                            tenant = Tenant(
+                                name=name,
+                                subscription_status=subscription_status,
+                                subscription_end=subscription_end
+                            )
+                            db.session.add(tenant)
+                            db.session.commit()
+                            st.success("Tenant created successfully!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Error creating tenant: {str(e)}")
+
+            # List existing tenants
+            st.write("#### Existing Tenants")
+            for tenant in tenants:
+                with st.expander(f"Tenant: {tenant.name}"):
+                    st.write(f"Status: {tenant.subscription_status}")
+                    st.write(f"Subscription End: {tenant.subscription_end}")
+                    st.write(f"Users: {len(tenant.users)}")
+
+                    if st.button("Delete Tenant", key=f"delete_tenant_{tenant.id}"):
+                        db.session.delete(tenant)
                         db.session.commit()
-                        logger.info(f"User deleted successfully: {user.email}")
-                        st.success("User deleted successfully!")
+                        st.success("Tenant deleted successfully!")
                         st.rerun()
-                    except Exception as e:
-                        logger.error(f"Error deleting user: {str(e)}")
-                        st.error(f"Error deleting user: {str(e)}")
 
-                # Show appropriate warning message
-                if is_last_admin:
-                    st.warning("This is the last admin user - create another admin user before deleting this one")
-                elif user.is_admin:
-                    st.info("You can delete this admin user because other admin users exist")
+        with credentials_tab:
+            st.write("#### Manage Client Credentials")
+            credentials = ClientCredential.query.all()
 
-    with tenants_tab:
-        st.write("#### Manage Tenants")
-        tenants = Tenant.query.all()
+            # Create new credentials
+            with st.expander("Add New Credentials"):
+                with st.form("create_credentials"):
+                    tenant = st.selectbox(
+                        "Select Tenant",
+                        options=Tenant.query.all(),
+                        format_func=lambda x: x.name,
+                        key="cred_tenant"
+                    )
+                    client_id = st.text_input("Client ID")
+                    client_secret = st.text_input("Client Secret", type="password")
+                    tenant_id_azure = st.text_input("Azure Tenant ID")
 
-        # Create new tenant
-        with st.expander("Create New Tenant"):
-            with st.form("create_tenant"):
-                name = st.text_input("Tenant Name")
-                subscription_status = st.selectbox(
-                    "Subscription Status",
-                    options=['trial', 'active', 'cancelled']
-                )
-                subscription_end = st.date_input(
-                    "Subscription End Date",
-                    value=datetime.now() + timedelta(days=30)
-                )
+                    if st.form_submit_button("Save Credentials"):
+                        try:
+                            cred = ClientCredential(
+                                tenant_id=tenant.id,
+                                client_id=client_id,
+                                client_secret=client_secret,
+                                tenant_id_azure=tenant_id_azure
+                            )
+                            db.session.add(cred)
+                            db.session.commit()
+                            st.success("Credentials saved successfully!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Error saving credentials: {str(e)}")
 
-                if st.form_submit_button("Create Tenant"):
-                    try:
-                        tenant = Tenant(
-                            name=name,
-                            subscription_status=subscription_status,
-                            subscription_end=subscription_end
-                        )
-                        db.session.add(tenant)
+            # List existing credentials
+            st.write("#### Existing Credentials")
+            for cred in credentials:
+                with st.expander(f"Credentials for: {cred.tenant.name}"):
+                    st.write(f"Client ID: {cred.client_id}")
+                    st.write(f"Azure Tenant ID: {cred.tenant_id_azure}")
+                    st.write(f"Last Updated: {cred.last_updated}")
+
+                    if st.button("Delete Credentials", key=f"delete_cred_{cred.id}"):
+                        db.session.delete(cred)
                         db.session.commit()
-                        st.success("Tenant created successfully!")
+                        st.success("Credentials deleted successfully!")
                         st.rerun()
-                    except Exception as e:
-                        st.error(f"Error creating tenant: {str(e)}")
-
-        # List existing tenants
-        st.write("#### Existing Tenants")
-        for tenant in tenants:
-            with st.expander(f"Tenant: {tenant.name}"):
-                st.write(f"Status: {tenant.subscription_status}")
-                st.write(f"Subscription End: {tenant.subscription_end}")
-                st.write(f"Users: {len(tenant.users)}")
-
-                if st.button("Delete Tenant", key=f"delete_tenant_{tenant.id}"):
-                    db.session.delete(tenant)
-                    db.session.commit()
-                    st.success("Tenant deleted successfully!")
-                    st.rerun()
-
-    with credentials_tab:
-        st.write("#### Manage Client Credentials")
-        credentials = ClientCredential.query.all()
-
-        # Create new credentials
-        with st.expander("Add New Credentials"):
-            with st.form("create_credentials"):
-                tenant = st.selectbox(
-                    "Select Tenant",
-                    options=Tenant.query.all(),
-                    format_func=lambda x: x.name,
-                    key="cred_tenant"
-                )
-                client_id = st.text_input("Client ID")
-                client_secret = st.text_input("Client Secret", type="password")
-                tenant_id_azure = st.text_input("Azure Tenant ID")
-
-                if st.form_submit_button("Save Credentials"):
-                    try:
-                        cred = ClientCredential(
-                            tenant_id=tenant.id,
-                            client_id=client_id,
-                            client_secret=client_secret,
-                            tenant_id_azure=tenant_id_azure
-                        )
-                        db.session.add(cred)
-                        db.session.commit()
-                        st.success("Credentials saved successfully!")
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Error saving credentials: {str(e)}")
-
-        # List existing credentials
-        st.write("#### Existing Credentials")
-        for cred in credentials:
-            with st.expander(f"Credentials for: {cred.tenant.name}"):
-                st.write(f"Client ID: {cred.client_id}")
-                st.write(f"Azure Tenant ID: {cred.tenant_id_azure}")
-                st.write(f"Last Updated: {cred.last_updated}")
-
-                if st.button("Delete Credentials", key=f"delete_cred_{cred.id}"):
-                    db.session.delete(cred)
-                    db.session.commit()
-                    st.success("Credentials deleted successfully!")
-                    st.rerun()
 
 def show_library_selector():
     """Display SharePoint library selector"""
