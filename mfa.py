@@ -27,15 +27,13 @@ def show_mfa_setup():
         if not user.mfa_enabled:
             st.info("""
             Two-factor authentication adds an extra layer of security to your account.
-            Once enabled, you'll need both your password and a verification code from your
-            authenticator app to log in.
-            """)
 
-            # Generate new secret if not exists
-            if not user.mfa_secret:
-                user.mfa_secret = pyotp.random_base32()
-                db.session.commit()
-                logger.info(f"Generated new MFA secret for user {user.email}")
+            Setup Instructions:
+            1. Install an authenticator app on your device (like Microsoft Authenticator or Google Authenticator)
+            2. Scan the QR code below with your authenticator app
+            3. When prompted, select "Work or school account" as this is an enterprise application
+            4. Enter the 6-digit code shown in your authenticator app below
+            """)
 
             try:
                 # Generate QR code
@@ -54,7 +52,7 @@ def show_mfa_setup():
                 img.save(img_buf, format='PNG')
 
                 # Display QR code
-                st.image(img_buf.getvalue(), caption="Scan with your authenticator app")
+                st.image(img_buf.getvalue(), caption="Scan this QR code with your authenticator app")
 
                 # Manual entry option
                 st.write("Or enter this code manually in your authenticator app:")
@@ -64,7 +62,7 @@ def show_mfa_setup():
                 with st.form("mfa_setup_form"):
                     verification_code = st.text_input(
                         "Enter verification code from your authenticator app",
-                        help="Enter the 6-digit code from your authenticator app"
+                        help="Enter the 6-digit code shown in your authenticator app"
                     )
                     submit = st.form_submit_button("Verify and Enable 2FA")
 

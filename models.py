@@ -38,7 +38,7 @@ class User(UserMixin, db.Model):
             self.mfa_secret = pyotp.random_base32()
         return pyotp.totp.TOTP(self.mfa_secret).provisioning_uri(
             name=self.email,
-            issuer_name="SharePoint Manager"
+            issuer_name="SharePoint Enterprise Manager"
         )
 
     def verify_mfa(self, code):
