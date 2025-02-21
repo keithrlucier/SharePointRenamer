@@ -320,13 +320,21 @@ class SharePointClient:
     def _create_rename_log(self, library_name, original_name, new_name, reason="Path too long"):
         """Log file rename operations to a log file in the library"""
         try:
+            if not self.access_token:
+                self.authenticate()
+
             # Get drive ID for the library
             host_part = f"{self.tenant}.sharepoint.com"
             site_path = self.site_path if self.site_path else ''
             site_id = f"sites/{host_part}{site_path}"
             drives_url = f"https://graph.microsoft.com/v1.0/{site_id}/drives"
 
-            response = requests.get(drives_url, headers={'Authorization': f'Bearer {self.access_token}'})
+            headers = {
+                'Authorization': f'Bearer {self.access_token}',
+                'Accept': 'application/json'
+            }
+
+            response = requests.get(drives_url, headers=headers)
             if response.status_code != 200:
                 raise Exception(f"Failed to get drives. Status code: {response.status_code}")
 
@@ -350,32 +358,45 @@ Reason: {reason}
 """
             # Check if log file exists
             search_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/root/search(q='{log_filename}')"
-            response = requests.get(search_url, headers={'Authorization': f'Bearer {self.access_token}'})
+            search_response = requests.get(search_url, headers=headers)
 
-            headers = {
+            content_headers = {
                 'Authorization': f'Bearer {self.access_token}',
-                'Content-Type': 'text/plain'
+                'Content-Type': 'text/plain; charset=utf-8'
             }
 
-            if response.status_code == 200 and response.json().get('value'):
+            if search_response.status_code == 200 and search_response.json().get('value'):
                 # File exists, append to it
-                file_id = response.json()['value'][0]['id']
-                update_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/content"
+                file_id = search_response.json()['value'][0]['id']
+                get_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/content"
+                get_response = requests.get(get_url, headers=headers)
 
-                # Get existing content
-                get_content_response = requests.get(update_url, headers={'Authorization': f'Bearer {self.access_token}'})
-                existing_content = get_content_response.text if get_content_response.status_code == 200 else ""
+                if get_response.status_code == 200:
+                    existing_content = get_response.text
+                    full_content = existing_content + log_content
 
-                # Append new content
-                full_content = existing_content + log_content
-                requests.put(update_url, headers=headers, data=full_content.encode('utf-8'))
+                    update_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/content"
+                    update_response = requests.put(update_url, headers=content_headers, data=full_content.encode('utf-8'))
+
+                    if update_response.status_code not in [200, 201]:
+                        logger.error(f"Failed to update log file. Status: {update_response.status_code}")
+                        logger.error(f"Response: {update_response.text}")
+                else:
+                    logger.error(f"Failed to get existing log content. Status: {get_response.status_code}")
             else:
                 # Create new file
-                create_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/root:/FileRenameLog.txt:/content"
-                requests.put(create_url, headers=headers, data=log_content.encode('utf-8'))
+                create_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/root:/{log_filename}:/content"
+                create_response = requests.put(create_url, headers=content_headers, data=log_content.encode('utf-8'))
+
+                if create_response.status_code not in [200, 201]:
+                    logger.error(f"Failed to create log file. Status: {create_response.status_code}")
+                    logger.error(f"Response: {create_response.text}")
+
+            logger.info(f"Successfully logged rename operation: {original_name} -> {new_name}")
 
         except Exception as e:
             logger.error(f"Failed to log rename operation: {str(e)}")
+            logger.error("Stack trace:", exc_info=True)
 
     def scan_for_long_paths(self, library_name):
         """Scan library for files with problematic path lengths"""
