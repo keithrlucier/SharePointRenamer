@@ -5,6 +5,7 @@ from models import User, db
 import pyotp
 from app import app
 import logging
+from navigation import show_navigation
 
 logger = logging.getLogger(__name__)
 
@@ -24,13 +25,8 @@ def show_mfa_setup():
             st.error("User not found")
             return
 
-        # Add navigation buttons at the top
-        col1, col2, col3 = st.columns([1, 1, 1])
-        with col1:
-            if user.is_admin:
-                if st.button("🔧 Admin Controls"):
-                    st.session_state['page'] = 'admin'
-                    st.rerun()
+        # Show navigation sidebar
+        show_navigation()
 
         if not user.mfa_enabled:
             st.info("""
@@ -114,3 +110,6 @@ def show_mfa_setup():
                 logger.info(f"MFA disabled for user {user.email}")
                 st.success("Two-factor authentication disabled")
                 st.rerun()
+
+if __name__ == "__main__":
+    show_mfa_setup()
