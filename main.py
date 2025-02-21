@@ -11,6 +11,7 @@ from models import User, Tenant, ClientCredential, db
 import bcrypt
 import pyotp
 from datetime import datetime, timedelta
+from app import app
 
 # Setup logging
 setup_logging()
@@ -18,6 +19,9 @@ logger = logging.getLogger(__name__)
 
 # App version
 APP_VERSION = "1.0.0"
+
+# Initialize Flask app context
+app.app_context().push()
 
 def show_navigation():
     """Display consistent navigation header"""
