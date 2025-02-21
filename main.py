@@ -12,6 +12,7 @@ import bcrypt
 import pyotp
 from datetime import datetime, timedelta
 from app import app
+from mfa import show_mfa_setup
 
 # Setup logging
 setup_logging()
@@ -807,7 +808,7 @@ def show_library_selector():
 
         # Add Create Test Library button
         if st.button("🧪 Create Test Library"):
-            with st.spinner("Creating test library with sample data..."):
+            with st.spinner("Creating test library withsample data..."):
                 try:
                     st.session_state.client.create_test_library()
                     st.success("Test library created successfully! Please refresh the library list.")
@@ -847,12 +848,14 @@ def main():
 
     # Show admin panel for admin users
     if st.session_state.get('is_admin', False):
-        show_admin_panel()
+        if st.session_state.get('current_page') == 'mfa_setup':
+            show_mfa_setup()
+        else:
+            show_admin_panel()
         return
 
     # Show appropriate page based on navigation state
     if st.session_state.get('current_page') == 'mfa_setup':
-        from mfa import show_mfa_setup
         show_mfa_setup()
     elif st.session_state.get('show_setup', False):
         show_setup_guide()
@@ -860,17 +863,7 @@ def main():
         show_credentials_manager()
     else:
         if st.session_state.get('authenticated', False):
-            libraries = st.session_state.client.get_libraries()
-            if libraries:
-                selected_library = st.selectbox(
-                    "Select Library",
-                    options=libraries,
-                    format_func=lambda x: x.replace('_', ' ').title()
-                )
-                if selected_library:
-                    show_file_manager(selected_library)
-            else:
-                st.info("No libraries found. Please check your permissions.")
+            show_library_selector()
         else:
             st.warning("Please connect to SharePoint using your credentials first.")
 
