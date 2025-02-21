@@ -76,6 +76,9 @@ def show_mfa_setup():
                         4. Only use digits 0-9 (no spaces or special characters)
                         """)
 
+                        # Add account type confirmation
+                        st.info("🔍 Important: Make sure you've selected 'Work or school account' in your authenticator app")
+
                         verification_code = st.text_input(
                             "Enter verification code from your authenticator app",
                             help="Enter the 6-digit code shown in your authenticator app",
