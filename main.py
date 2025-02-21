@@ -814,7 +814,7 @@ def show_library_selector():
         if selected_library:
             show_file_manager(selected_library)
     except Exception as e:
-        st.error(f""Error loading libraries: {str(e)}")
+        st.error(f"Error loading libraries: {str(e)}")
         logger.error(f"Error loading libraries: {str(e)}")
         if "authentication" in str(e).lower():
             st.session_state.authenticated = False

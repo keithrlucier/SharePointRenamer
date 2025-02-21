@@ -4,8 +4,8 @@ address = "0.0.0.0"
 port = 5000
 enableCORS = true
 enableXsrfProtection = true
-sslCertFile = ""  # Let Replit handle SSL
-sslKeyFile = ""   # Let Replit handle SSL
+sslCertFile = ""
+sslKeyFile = ""
 
 [browser]
 serverAddress = "0.0.0.0"
