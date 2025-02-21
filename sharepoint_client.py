@@ -328,7 +328,7 @@ class SharePointClient:
             log_dir = "logs"
             os.makedirs(log_dir, exist_ok=True)
 
-            log_file_path = os.path.join(log_dir, "rename_operations.log")
+            log_file_path = os.path.join(log_dir, "rename_operations.txt")
 
             # Create a local log entry with timestamp
             timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -384,6 +384,58 @@ class SharePointClient:
             logger.error(f"Failed to scan for long paths: {str(e)}")
             raise
 
+    def _upload_log_to_library(self, library_name, log_content):
+        """Upload the rename log to the current SharePoint library"""
+        try:
+            if not self.access_token:
+                self.authenticate()
+
+            headers = {
+                'Authorization': f'Bearer {self.access_token}',
+                'Content-Type': 'text/plain'
+            }
+
+            # Get drive ID for the library
+            host_part = f"{self.tenant}.sharepoint.com"
+            site_path = self.site_path if self.site_path else ''
+            site_id = f"sites/{host_part}{site_path}"
+            drives_url = f"https://graph.microsoft.com/v1.0/{site_id}/drives"
+
+            response = requests.get(drives_url, headers=headers)
+            if response.status_code != 200:
+                raise Exception(f"Failed to get drives. Status code: {response.status_code}")
+
+            drive_id = None
+            for drive in response.json().get('value', []):
+                if drive['name'] == library_name:
+                    drive_id = drive['id']
+                    break
+
+            if not drive_id:
+                raise Exception(f"Library '{library_name}' not found")
+
+            # Upload log file
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            file_name = f"rename_operations_{timestamp}.txt"
+            upload_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/root:/{file_name}:/content"
+
+            response = requests.put(
+                upload_url,
+                headers=headers,
+                data=log_content.encode('utf-8')
+            )
+
+            if response.status_code not in [200, 201]:
+                logger.error(f"Failed to upload log file. Response: {response.text}")
+                return False
+
+            logger.info(f"Successfully uploaded log file {file_name} to SharePoint")
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to upload log to SharePoint: {str(e)}")
+            return False
+
     def bulk_rename_files(self, library_name, rename_operations):
         """Bulk rename with proper logging for each operation"""
         try:
@@ -415,6 +467,9 @@ class SharePointClient:
             if not drive_id:
                 raise Exception(f"Library '{library_name}' not found")
 
+            # Initialize log content for SharePoint
+            sharepoint_log_content = ""
+
             # Process rename operations
             results = []
             for operation in rename_operations:
@@ -432,8 +487,12 @@ class SharePointClient:
 
                     response = requests.patch(update_url, headers=headers, json=update_data)
 
+                    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                     if response.status_code in [200, 201]:
-                        # Log the successful rename immediately
+                        log_entry = f"[{timestamp}] {library_name}: Renamed \"{old_name}\" to \"{new_name}\" (Bulk rename operation)\n"
+                        sharepoint_log_content += log_entry
+
+                        # Log locally as well
                         log_success = self._create_rename_log(
                             library_name,
                             old_name,
@@ -456,7 +515,10 @@ class SharePointClient:
                         logger.info(f"Successfully renamed {old_name} to {new_name}")
                     else:
                         error_message = response.text
-                        # Log the failed rename attempt
+                        log_entry = f"[{timestamp}] {library_name}: Failed to rename \"{old_name}\" to \"{new_name}\" (Error: {error_message})\n"
+                        sharepoint_log_content += log_entry
+
+                        # Log the failed rename attempt locally
                         self._create_rename_log(
                             library_name,
                             old_name,
@@ -475,8 +537,13 @@ class SharePointClient:
                         logger.error(f"Failed to rename {old_name}: {error_message}")
 
                 except Exception as e:
+                    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    log_entry = f"[{timestamp}] {library_name}: Error processing \"{operation.get('old_name', 'unknown')}\" (Error: {str(e)})\n"
+                    sharepoint_log_content += log_entry
+
                     logger.error(f"Error processing rename for {operation.get('old_name', 'unknown')}: {str(e)}")
-                    # Log the exception
+
+                    # Log the exception locally
                     self._create_rename_log(
                         library_name,
                         operation.get('old_name', 'unknown'),
@@ -492,6 +559,10 @@ class SharePointClient:
                         'error': str(e),
                         'logged': True
                     })
+
+            # Upload log file to SharePoint
+            if sharepoint_log_content:
+                self._upload_log_to_library(library_name, sharepoint_log_content)
 
             return results
 
@@ -704,7 +775,7 @@ class SharePointClient:
             for file in files:
                 parent_path = file.get('ParentPath', '')
                 if parent_path and parent_path not in folders:
-                    path_parts = parent_path.split('/')
+                    path_parts = parentpath.split('/')
                     folder_name = path_parts[-1] if path_parts else 'Root'
                     folders[parent_path] = {
                         'id': file.get('Id'),
