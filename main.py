@@ -12,6 +12,7 @@ import bcrypt
 import pyotp
 from datetime import datetime, timedelta
 from app import app
+from urllib.parse import urlparse
 
 # Setup logging
 setup_logging()
@@ -822,10 +823,26 @@ def show_library_selector():
 
 
 
+def setup_ssl_redirect():
+    """Configure SSL redirect for custom domain"""
+    try:
+        # Check if running on Replit with custom domain
+        if 'REPL_SLUG' in os.environ and 'REPL_OWNER' in os.environ:
+            # Get request headers through Streamlit's session state
+            if 'x-forwarded-proto' in st.runtime.scriptrunner.get_script_run_ctx().request.headers:
+                proto = st.runtime.scriptrunner.get_script_run_ctx().request.headers['x-forwarded-proto']
+                if proto == 'http':
+                    st.error("⚠️ Insecure Connection: Please use HTTPS for this application.")
+                    st.stop()
+    except Exception as e:
+        logger.error(f"Error in SSL redirect: {str(e)}")
+        # Continue execution even if SSL check fails
+        pass
+
 def main():
     """Main application entry point"""
     initialize_session_state()
-
+    setup_ssl_redirect()
     # Check if user is logged in
     if 'user' not in st.session_state:
         show_login()
