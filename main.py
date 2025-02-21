@@ -333,6 +333,18 @@ def show_library_selector():
                 st.warning("No document libraries found in this SharePoint site.")
                 return
 
+        # Add Create Test Library button
+        if st.button("🧪 Create Test Library"):
+            with st.spinner("Creating test library with sample data..."):
+                try:
+                    st.session_state.client.create_test_library()
+                    st.success("Test library created successfully! Please refresh the library list.")
+                    time.sleep(2)
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Failed to create test library: {str(e)}")
+                    logger.error(f"Failed to create test library: {str(e)}")
+
         selected_library = st.selectbox("Select SharePoint Library", libraries)
         if selected_library:
             # Add scan button in sidebar

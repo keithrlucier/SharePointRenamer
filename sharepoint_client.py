@@ -490,3 +490,111 @@ Reason: {reason}
         except Exception as e:
             logger.error(f"Failed to perform bulk rename: {str(e)}")
             raise
+
+    def create_test_library(self):
+        """Create a test library with sample data including problematic file paths"""
+        try:
+            if not self.access_token:
+                self.authenticate()
+
+            headers = {
+                'Authorization': f'Bearer {self.access_token}',
+                'Accept': 'application/json',
+                'Content-Type': 'application/json'
+            }
+
+            # First, create the test library if it doesn't exist
+            host_part = f"{self.tenant}.sharepoint.com"
+            site_path = self.site_path if self.site_path else ''
+            site_id = f"sites/{host_part}{site_path}"
+
+            # Check if Test Library exists
+            drives_url = f"https://graph.microsoft.com/v1.0/{site_id}/drives"
+            response = requests.get(drives_url, headers=headers)
+
+            if response.status_code != 200:
+                raise Exception(f"Failed to get drives. Status code: {response.status_code}")
+
+            test_library_exists = False
+            test_library_id = None
+
+            for drive in response.json().get('value', []):
+                if drive['name'] == "Test Library":
+                    test_library_exists = True
+                    test_library_id = drive['id']
+                    break
+
+            if not test_library_exists:
+                # Create Test Library
+                create_library_url = f"https://graph.microsoft.com/v1.0/{site_id}/drives"
+                library_data = {
+                    "name": "Test Library",
+                    "driveType": "documentLibrary"
+                }
+                response = requests.post(create_library_url, headers=headers, json=library_data)
+
+                if response.status_code not in [200, 201]:
+                    raise Exception(f"Failed to create Test Library. Status code: {response.status_code}")
+
+                test_library_id = response.json()['id']
+                logger.info("Created Test Library successfully")
+
+            # Create sample folder structure and files
+            root_url = f"https://graph.microsoft.com/v1.0/drives/{test_library_id}/root"
+
+            # Create sample folders with varying depths
+            folders = [
+                "CASE TYH911 DST STATE OF FLORIDA E2E",
+                "CASE TYH911 DST STATE OF FLORIDA E2E/Pleadings and Court Documents",
+                "CASE TYH911 DST STATE OF FLORIDA E2E/Discovery Requests",
+                "CASE TYH911 DST STATE OF FLORIDA E2E/Expert Reports and Analysis",
+                "Very Long Path Example/Subfolder Level 1/Subfolder Level 2/Subfolder Level 3/Deep Nested Files"
+            ]
+
+            for folder_path in folders:
+                folder_url = f"{root_url}:/{folder_path}:"
+                response = requests.patch(folder_url, headers=headers, json={"folder": {}})
+
+                if response.status_code not in [200, 201]:
+                    logger.warning(f"Failed to create folder {folder_path}")
+                else:
+                    logger.info(f"Created folder: {folder_path}")
+
+            # Create sample files with different naming patterns
+            sample_files = [
+                {
+                    "path": "CASE TYH911 DST STATE OF FLORIDA E2E/Simple File.txt",
+                    "content": "This is a simple test file."
+                },
+                {
+                    "path": "CASE TYH911 DST STATE OF FLORIDA E2E/Pleadings and Court Documents/NOTICE OF FILING DEFENDANTS RESPONSE TO PLAINTIFFS FIRST SET OF INTERROGATORIES AND REQUEST FOR PRODUCTION OF DOCUMENTS.pdf",
+                    "content": "Sample long filename document"
+                },
+                {
+                    "path": "CASE TYH911 DST STATE OF FLORIDA E2E/Expert Reports and Analysis/IN THE MATTER OF CERTAIN WIRELESS DEVICES WITH 3G AND-OR 4G CAPABILITIES AND COMPONENTS THEREOF ORDER NO. 85- GRANTING COMPLAINANT INTERDIGITALS MOTION TO STRIKE PORTIONS OF THE EXPERT REPORT OF DR. JAMES OLIVIER BASED ON NEW CONTENTIONS AND TO PRECL.txt",
+                    "content": "This is an example of a very long filename that might cause issues."
+                },
+                {
+                    "path": "Very Long Path Example/Subfolder Level 1/Subfolder Level 2/Subfolder Level 3/Deep Nested Files/MEMORANDUM OF LAW IN SUPPORT OF DEFENDANTS MOTION TO DISMISS PLAINTIFFS FIRST AMENDED COMPLAINT FOR LACK OF PERSONAL JURISDICTION AND IMPROPER VENUE OR IN THE ALTERNATIVE MOTION TO TRANSFER VENUE.docx",
+                    "content": "This file has both a long path and a long filename."
+                }
+            ]
+
+            for file_info in sample_files:
+                file_url = f"{root_url}:/{file_info['path']}:/content"
+                file_response = requests.put(
+                    file_url,
+                    headers={'Authorization': f'Bearer {self.access_token}', 'Content-Type': 'text/plain'},
+                    data=file_info['content'].encode('utf-8')
+                )
+
+                if file_response.status_code not in [200, 201]:
+                    logger.warning(f"Failed to create file {file_info['path']}")
+                else:
+                    logger.info(f"Created file: {file_info['path']}")
+
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to create test library: {str(e)}")
+            raise
