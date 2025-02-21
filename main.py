@@ -75,25 +75,19 @@ def show_file_manager(library_name):
         # Add scan button in sidebar with clear description
         if st.sidebar.button("🔍 Scan for Long Names & Paths"):
             with st.spinner("Scanning for problematic files..."):
-                # Check both filename and full path length
-                st.session_state.problematic_files = [
-                    {
-                        'file': file,
-                        'name_length': len(file['Name']),
-                        'path_length': len(file.get('ParentPath', '') + '/' + file['Name'])
-                    }
-                    for files in files_by_path.values()
-                    for file in files
-                    if len(file['Name']) > 128 or len(file.get('ParentPath', '') + '/' + file['Name']) > 256
-                ]
+                problematic_files = st.session_state.client.scan_for_long_paths(library_name)
+                st.session_state.problematic_files = problematic_files
 
-                if st.session_state.problematic_files:
-                    st.sidebar.warning(f"Found {len(st.session_state.problematic_files)} problematic files")
+                if problematic_files:
+                    st.sidebar.warning(f"Found {len(problematic_files)} problematic files")
                     with st.sidebar.expander("View Problematic Files"):
-                        for item in st.session_state.problematic_files:
-                            st.write(f"📄 {item['file']['Name']}")
-                            st.write(f"Filename length: {item['name_length']} characters")
-                            st.write(f"Full path length: {item['path_length']} characters")
+                        for item in problematic_files:
+                            st.write(f"📄 {item['name']}")
+                            if item['filename_length'] > 128:
+                                st.write(f"⚠️ Filename too long: {item['filename_length']} characters")
+                            if item['full_path_length'] > 256:
+                                st.write(f"⚠️ Path too long: {item['full_path_length']} characters")
+                            st.write(f"Full path: {item['full_path']}")
                             st.write("---")
                 else:
                     st.sidebar.success("No problematic files found")
@@ -103,9 +97,12 @@ def show_file_manager(library_name):
         if st.session_state.problematic_files:
             if st.sidebar.button("Select All Problematic Files"):
                 st.session_state.selected_files = {
-                    item['file']['Id']: item['file'] for item in st.session_state.problematic_files
+                    item['id']: {
+                        'Id': item['id'],
+                        'Name': item['name'],
+                        'Path': item['path']
+                    } for item in st.session_state.problematic_files
                 }
-                logger.info(f"Selected all problematic files: {len(st.session_state.problematic_files)} total")
                 st.rerun()
 
         # Bulk rename controls in sidebar

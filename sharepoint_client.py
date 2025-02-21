@@ -302,8 +302,16 @@ class SharePointClient:
     def _get_full_path(self, library_name, file_path):
         """Calculate the full path length including SharePoint URL"""
         # Base SharePoint URL + Library + File path
+        if isinstance(file_path, dict):
+            # Handle when file_path is a file object
+            path_components = []
+            if file_path.get('ParentPath'):
+                path_components.append(file_path['ParentPath'])
+            if file_path.get('Name'):
+                path_components.append(file_path['Name'])
+            file_path = '/'.join(path_components)
         full_path = f"{self.site_url}/{library_name}/{file_path}"
-        return full_path
+        return full_path.rstrip('/')
 
     def _is_path_too_long(self, full_path, max_length=240):
         """Check if path length exceeds safe limit"""
@@ -379,13 +387,19 @@ Reason: {reason}
             problematic_files = []
 
             for file in files:
-                full_path = self._get_full_path(library_name, file['Path'])
-                if self._is_path_too_long(full_path):
+                # Check both filename length and full path length
+                filename_length = len(file['Name'])
+                full_path = self._get_full_path(library_name, file)
+                full_path_length = len(full_path)
+
+                if filename_length > 128 or full_path_length > 256:
                     problematic_files.append({
                         'id': file['Id'],
                         'name': file['Name'],
                         'path': file['Path'],
-                        'full_path_length': len(full_path)
+                        'filename_length': filename_length,
+                        'full_path_length': full_path_length,
+                        'full_path': full_path
                     })
 
             return problematic_files
