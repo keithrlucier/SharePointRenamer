@@ -27,21 +27,33 @@ def show_mfa_setup():
         if not user.mfa_enabled:
             st.info("""
             Two-factor authentication adds an extra layer of security to your account.
-
-            Setup Instructions:
-            1. Install an authenticator app on your device:
-               - Microsoft Authenticator (recommended)
-               - Google Authenticator
-               - Authy
+            Please follow these steps to set up 2FA:
             """)
 
+            col1, col2 = st.columns(2)
+
+            with col1:
+                st.markdown("""
+                1. Install an authenticator app:
+                   - Microsoft Authenticator
+                   - Google Authenticator
+                   - Authy
+                """)
+
+            with col2:
+                st.markdown("""
+                2. Open your authenticator app
+                3. Add a new account
+                4. Scan the QR code below
+                """)
+
             try:
-                # Generate QR code with smaller size
+                # Generate QR code
                 qr = qrcode.QRCode(
                     version=1,
                     error_correction=qrcode.constants.ERROR_CORRECT_L,
-                    box_size=6,
-                    border=2,
+                    box_size=10,
+                    border=4,
                 )
                 qr.add_data(user.get_mfa_uri())
                 qr.make(fit=True)
@@ -54,61 +66,31 @@ def show_mfa_setup():
                 # Display QR code
                 st.image(img_buf.getvalue(), caption="Scan this QR code with your authenticator app")
 
-                # Manual entry option
-                st.write("Or enter this code manually in your authenticator app:")
-                st.code(user.mfa_secret)
+                # Verification section
+                st.markdown("### Verify Setup")
+                st.info("Enter the 6-digit code from your authenticator app to complete setup")
 
-                # Important warning before verification
-                st.warning("⚠️ Important: Please follow these steps carefully:", icon="⚠️")
-                st.markdown("""
-                1. Wait for a new code to appear in your authenticator
-                2. Enter the code immediately when it appears
-                3. Make sure your device's time is correctly synchronized
-                4. Only use digits 0-9 (no spaces or special characters)
-                """)
+                code = st.text_input(
+                    "Verification Code",
+                    max_chars=6,
+                    help="Enter the 6-digit code shown in your authenticator app"
+                )
 
-                # Account type confirmation with emphasis
-                st.info("🔍 Important: Make sure you've selected 'Work or school account' in your authenticator app")
-
-                # Verification form
-                with st.form("mfa_setup_form"):
-                    verification_code = st.text_input(
-                        "Enter verification code from your authenticator app",
-                        help="Enter the 6-digit code shown in your authenticator app",
-                        max_chars=6,
-                        placeholder="123456"
-                    )
-
-                    # Real-time validation feedback
-                    if verification_code:
-                        if not verification_code.isdigit():
-                            st.error("Please enter only numbers (0-9)")
-                        elif len(verification_code) != 6:
-                            st.error("Code must be exactly 6 digits")
-
-                    # Submit button and verification logic
-                    submit = st.form_submit_button("Verify and Enable 2FA")
-                    if submit:
-                        if not verification_code:
-                            st.error("Please enter a verification code.")
-                        elif not verification_code.isdigit() or len(verification_code) != 6:
-                            st.error("Please enter exactly 6 digits (0-9 only).")
+                if st.button("Verify and Enable 2FA"):
+                    if not code:
+                        st.error("Please enter a verification code")
+                    elif not code.isdigit() or len(code) != 6:
+                        st.error("Please enter a valid 6-digit code")
+                    else:
+                        if user.verify_mfa(code):
+                            user.mfa_enabled = True
+                            db.session.commit()
+                            logger.info(f"MFA enabled successfully for user {user.email}")
+                            st.success("Two-factor authentication enabled successfully!")
+                            st.rerun()
                         else:
-                            if user.verify_mfa(verification_code):
-                                user.mfa_enabled = True
-                                db.session.commit()
-                                logger.info(f"MFA enabled successfully for user {user.email}")
-                                st.success("Two-factor authentication enabled successfully!")
-                                st.rerun()
-                            else:
-                                st.error("Invalid verification code. Please ensure:")
-                                st.markdown("""
-                                1. Your device's time is correctly synchronized
-                                2. You're using a fresh code from your authenticator
-                                3. You selected "Work or school account" during setup
-                                4. You entered the code immediately after it appeared
-                                """)
-                                logger.warning(f"Failed MFA verification attempt for user {user.email}")
+                            st.error("Invalid verification code")
+                            logger.warning(f"Failed MFA verification attempt for user {user.email}")
 
             except Exception as e:
                 logger.error(f"Error in MFA setup: {str(e)}")

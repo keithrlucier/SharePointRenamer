@@ -12,7 +12,7 @@ db = SQLAlchemy()
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(120), unique=True, nullable=False)
-    password_hash = db.Column(db.LargeBinary, nullable=False)  # Store as binary
+    password_hash = db.Column(db.LargeBinary, nullable=False)
     is_admin = db.Column(db.Boolean, default=False)
     is_active = db.Column(db.Boolean, default=True)
     mfa_secret = db.Column(db.String(32))
@@ -39,33 +39,26 @@ class User(UserMixin, db.Model):
         """Generate MFA URI for QR code"""
         if not self.mfa_secret:
             self.mfa_secret = pyotp.random_base32()
-        return pyotp.totp.TOTP(self.mfa_secret).provisioning_uri(
+            db.session.commit()
+            logger.info(f"Generated new MFA secret for user {self.email}")
+
+        totp = pyotp.TOTP(self.mfa_secret)
+        uri = totp.provisioning_uri(
             name=self.email,
-            issuer_name="SharePoint Enterprise Manager"
+            issuer_name="SharePoint File Manager"
         )
+        logger.info(f"Generated MFA URI for user {self.email}")
+        return uri
 
     def verify_mfa(self, code):
-        """Verify MFA code with extended validation and error handling"""
-        if not self.mfa_enabled or not self.mfa_secret or not code:
-            logger.warning(f"MFA verification failed: Invalid state for user {self.email}")
+        """Simple TOTP code verification"""
+        if not self.mfa_secret:
+            logger.error(f"No MFA secret found for user {self.email}")
             return False
 
         try:
-            # Basic validation
-            if not isinstance(code, str):
-                logger.warning(f"Invalid code type for user {self.email}")
-                return False
-
-            # Format validation
-            code = code.strip()  # Remove any whitespace
-            if not code.isdigit() or len(code) != 6:
-                logger.warning(f"Invalid code format for user {self.email}")
-                return False
-
             totp = pyotp.TOTP(self.mfa_secret)
-            # Increase window size to ±4 intervals (±120 seconds)
-            # This gives even more tolerance for time drift
-            return totp.verify(code, valid_window=4)
+            return totp.verify(code)
         except Exception as e:
             logger.error(f"MFA verification error for user {self.email}: {str(e)}")
             return False
@@ -73,7 +66,7 @@ class User(UserMixin, db.Model):
 class Tenant(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
-    subscription_status = db.Column(db.String(20), default='trial')  # trial, active, cancelled
+    subscription_status = db.Column(db.String(20), default='trial')
     subscription_end = db.Column(db.DateTime)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     users = db.relationship('User', backref='tenant', lazy=True)
