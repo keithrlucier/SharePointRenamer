@@ -641,3 +641,80 @@ Reason: {reason}
         except Exception as e:
             logger.error(f"Failed to create test library: {str(e)}")
             raise
+
+    def move_file(self, library_name, file_id, target_folder_id):
+        """Move a file to a different folder using Microsoft Graph API"""
+        try:
+            if not self.access_token:
+                self.authenticate()
+
+            headers = {
+                'Authorization': f'Bearer {self.access_token}',
+                'Accept': 'application/json',
+                'Content-Type': 'application/json'
+            }
+
+            # First get the drive ID for the library
+            host_part = f"{self.tenant}.sharepoint.com"
+            site_path = self.site_path if self.site_path else ''
+            site_id = f"sites/{host_part}{site_path}"
+            drives_url = f"https://graph.microsoft.com/v1.0/{site_id}/drives"
+
+            response = requests.get(drives_url, headers=headers)
+            if response.status_code != 200:
+                raise Exception(f"Failed to get drives. Status code: {response.status_code}")
+
+            drive_id = None
+            for drive in response.json().get('value', []):
+                if drive['name'] == library_name:
+                    drive_id = drive['id']
+                    break
+
+            if not drive_id:
+                raise Exception(f"Library '{library_name}' not found")
+
+            # Move the file to target folder
+            move_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}"
+            move_data = {
+                'parentReference': {
+                    'id': target_folder_id
+                }
+            }
+
+            response = requests.patch(move_url, headers=headers, json=move_data)
+
+            if response.status_code not in [200, 201]:
+                logger.error(f"Failed to move file. Response: {response.text}")
+                raise Exception(f"Failed to move file. Status code: {response.status_code}")
+
+            return response.json()
+
+        except Exception as e:
+            logger.error(f"Failed to move file: {str(e)}")
+            raise
+
+    def get_folders(self, library_name):
+        """Get all folders in a library"""
+        try:
+            if not self.access_token:
+                self.authenticate()
+
+            files = self.get_files(library_name)
+            folders = {}
+
+            for file in files:
+                parent_path = file.get('ParentPath', '')
+                if parent_path and parent_path not in folders:
+                    path_parts = parent_path.split('/')
+                    folder_name = path_parts[-1] if path_parts else 'Root'
+                    folders[parent_path] = {
+                        'id': file.get('Id'),
+                        'name': folder_name,
+                        'path': parent_path
+                    }
+
+            return list(folders.values())
+
+        except Exception as e:
+            logger.error(f"Failed to get folders: {str(e)}")
+            raise

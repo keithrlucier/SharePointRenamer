@@ -44,6 +44,13 @@ def apply_rename_pattern(filename, pattern):
         # Extract the file extension
         name, ext = os.path.splitext(filename)
 
+        # If filename is too long (over 128 chars), truncate it while keeping important parts
+        if len(filename) > 128:
+            # Keep first 100 characters of name (or less if extension is long)
+            max_name_length = 128 - len(ext)  # Reserve space for extension
+            if len(name) > max_name_length:
+                name = name[:max_name_length - 3] + "..."
+
         # Replace placeholders in pattern
         new_name = pattern.replace('{name}', name).replace('{ext}', ext)
 
