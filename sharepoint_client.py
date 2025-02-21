@@ -395,7 +395,7 @@ Reason: {reason}
             raise
 
     def bulk_rename_files(self, library_name, rename_operations):
-        """Enhanced bulk rename with proper batch processing and error handling"""
+        """Enhanced bulk rename with proper batch processing"""
         try:
             if not self.access_token:
                 self.authenticate()
@@ -416,9 +416,8 @@ Reason: {reason}
             if response.status_code != 200:
                 raise Exception(f"Failed to get drives. Status code: {response.status_code}")
 
-            drives_data = response.json()
             drive_id = None
-            for drive in drives_data.get('value', []):
+            for drive in response.json().get('value', []):
                 if drive['name'] == library_name:
                     drive_id = drive['id']
                     break
@@ -426,63 +425,61 @@ Reason: {reason}
             if not drive_id:
                 raise Exception(f"Library '{library_name}' not found")
 
-            # Process each rename operation
+            # Prepare batch request
+            batch_url = "https://graph.microsoft.com/v1.0/$batch"
+            batch_requests = []
+            request_map = {}  # Map request IDs to original operations
+
+            for idx, operation in enumerate(rename_operations):
+                request_id = str(idx + 1)
+                file_id = operation['file_id']
+                new_name = operation['new_name']
+
+                # Add request to batch
+                batch_requests.append({
+                    "id": request_id,
+                    "method": "PATCH",
+                    "url": f"/drives/{drive_id}/items/{file_id}",
+                    "body": {"name": new_name},
+                    "headers": {"Content-Type": "application/json"}
+                })
+                request_map[request_id] = operation
+
+            # Split into batches of 20 (Graph API limit)
+            batch_size = 20
             results = []
-            for operation in rename_operations:
-                try:
-                    file_id = operation['file_id']
-                    new_name = operation['new_name']
-                    old_name = operation['old_name']
 
-                    # Verify file exists and get current details
-                    file_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}"
-                    file_response = requests.get(file_url, headers=headers)
+            for i in range(0, len(batch_requests), batch_size):
+                batch_slice = batch_requests[i:i + batch_size]
+                batch_payload = {"requests": batch_slice}
 
-                    if file_response.status_code != 200:
-                        raise Exception(f"Failed to verify file existence. Status code: {file_response.status_code}")
+                logger.info(f"Processing batch {i//batch_size + 1} with {len(batch_slice)} operations")
 
-                    file_data = file_response.json()
-                    parent_path = file_data.get('parentReference', {}).get('path', '')
+                response = requests.post(batch_url, headers=headers, json=batch_payload)
 
-                    # Check if new path would be too long
-                    new_full_path = self._get_full_path(library_name, f"{parent_path}/{new_name}")
-                    if self._is_path_too_long(new_full_path):
-                        name, ext = os.path.splitext(new_name)
-                        truncated_name = name[:20] + "..." + ext
-                        new_name = truncated_name
-                        logger.warning(f"File path too long, truncating to: {truncated_name}")
+                if response.status_code != 200:
+                    raise Exception(f"Batch request failed. Status: {response.status_code}")
 
-                    # Rename the file
-                    update_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}"
-                    update_data = {'name': new_name}
+                batch_results = response.json().get('responses', [])
 
-                    response = requests.patch(update_url, headers=headers, json=update_data)
+                # Process batch results
+                for result in batch_results:
+                    request_id = result['id']
+                    original_op = request_map[request_id]
+                    success = 200 <= result['status'] < 300
 
-                    if response.status_code not in [200, 201]:
-                        error_msg = f"Failed to rename {old_name}. Status code: {response.status_code}"
-                        if response.text:
-                            error_msg += f" Response: {response.text}"
-                        raise Exception(error_msg)
-
-                    # Log successful rename
-                    logger.info(f"Successfully renamed {old_name} to {new_name}")
-                    self._create_rename_log(library_name, old_name, new_name)
+                    if success:
+                        logger.info(f"Successfully renamed {original_op['old_name']} to {original_op['new_name']}")
+                        self._create_rename_log(library_name, original_op['old_name'], original_op['new_name'])
+                    else:
+                        logger.error(f"Failed to rename {original_op['old_name']}: {result.get('body', {}).get('error', {}).get('message', 'Unknown error')}")
 
                     results.append({
-                        'old_name': old_name,
-                        'new_name': new_name,
-                        'success': True,
-                        'file_id': file_id
-                    })
-
-                except Exception as e:
-                    logger.error(f"Error renaming file {operation['old_name']}: {str(e)}")
-                    results.append({
-                        'old_name': operation['old_name'],
-                        'new_name': operation['new_name'],
-                        'success': False,
-                        'error': str(e),
-                        'file_id': operation['file_id']
+                        'old_name': original_op['old_name'],
+                        'new_name': original_op['new_name'],
+                        'success': success,
+                        'file_id': original_op['file_id'],
+                        'error': None if success else result.get('body', {}).get('error', {}).get('message', 'Unknown error')
                     })
 
             return results
