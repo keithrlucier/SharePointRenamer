@@ -47,6 +47,7 @@ def show_navigation():
         padding: 4px 8px;
         border-radius: 4px;
         margin-left: 10px;
+        display: inline-block;
     }
     .status-connected {
         background-color: #D1FAE5;
@@ -72,14 +73,20 @@ def show_navigation():
             unsafe_allow_html=True
         )
 
-    # Show connection status
-    connection_status = "🟢 Connected" if st.session_state.get('authenticated', False) else "🔴 Not Connected"
+    # Show connection status more prominently
+    connection_status = "🟢 Connected to SharePoint" if st.session_state.get('authenticated', False) else "🔴 Not Connected to SharePoint"
     status_class = "status-connected" if st.session_state.get('authenticated', False) else "status-disconnected"
     st.markdown(f'<span class="connection-status {status_class}">{connection_status}</span>', unsafe_allow_html=True)
 
     with col2:
-        if st.session_state.get('authenticated', False):
-            if st.button("🏠 Home", key="nav_home"):
+        # Home button always visible
+        if st.button("🏠 Libraries", key="nav_home"):
+            if st.session_state.get('authenticated', False):
+                st.session_state['show_setup'] = False
+                st.session_state['show_credentials'] = False
+                st.rerun()
+            else:
+                st.warning("Please connect to SharePoint first to access libraries.")
                 st.session_state['show_setup'] = False
                 st.session_state['show_credentials'] = False
                 st.rerun()
