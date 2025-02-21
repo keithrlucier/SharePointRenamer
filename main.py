@@ -659,6 +659,8 @@ def show_admin_panel():
 
         # List existing users
         st.write("#### Existing Users")
+        admin_count = User.query.filter_by(is_admin=True).count()
+
         for user in users:
             with st.expander(f"User: {user.email}"):
                 st.write(f"Admin: {'Yes' if user.is_admin else 'No'}")
@@ -672,11 +674,29 @@ def show_admin_panel():
                     st.success("MFA reset successfully!")
                     st.rerun()
 
-                if st.button("Delete User", key=f"delete_user_{user.id}"):
-                    db.session.delete(user)
-                    db.session.commit()
-                    st.success("User deleted successfully!")
-                    st.rerun()
+                # Prevent deletion of last admin user
+                can_delete = not (user.is_admin and admin_count == 1)
+
+                # Add delete confirmation
+                if st.button("Delete User", key=f"delete_user_{user.id}", disabled=not can_delete):
+                    try:
+                        # Check if it's the last admin
+                        if user.is_admin and admin_count <= 1:
+                            st.error("Cannot delete the last admin user!")
+                            return
+
+                        # Clean up user data
+                        db.session.delete(user)
+                        db.session.commit()
+                        logger.info(f"User deleted successfully: {user.email}")
+                        st.success("User deleted successfully!")
+                        st.rerun()
+                    except Exception as e:
+                        logger.error(f"Error deleting user: {str(e)}")
+                        st.error(f"Error deleting user: {str(e)}")
+
+                if not can_delete:
+                    st.warning("Cannot delete the last admin user")
 
     with tenants_tab:
         st.write("#### Manage Tenants")
@@ -799,6 +819,7 @@ def show_library_selector():
         if "authentication" in str(e).lower():
             st.session_state.authenticated = False
             st.rerun()
+
 
 
 def main():
