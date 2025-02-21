@@ -71,6 +71,40 @@ def show_file_manager(library_name):
                 files_by_path[parent_path] = []
             files_by_path[parent_path].append(file)
 
+        # Add scan button in sidebar with clear description
+        if st.sidebar.button("🔍 Scan for Long Names & Paths"):
+            with st.spinner("Scanning for problematic files..."):
+                # Check both filename and full path length
+                problematic_files = [
+                    {
+                        'file': file,
+                        'name_length': len(file['Name']),
+                        'path_length': len(file.get('ParentPath', '') + '/' + file['Name'])
+                    }
+                    for files in files_by_path.values()
+                    for file in files
+                    if len(file['Name']) > 128 or len(file.get('ParentPath', '') + '/' + file['Name']) > 256
+                ]
+
+                if problematic_files:
+                    st.sidebar.warning(f"Found {len(problematic_files)} problematic files")
+                    with st.sidebar.expander("View Problematic Files"):
+                        for item in problematic_files:
+                            st.write(f"📄 {item['file']['Name']}")
+                            st.write(f"Filename length: {item['name_length']} characters")
+                            st.write(f"Full path length: {item['path_length']} characters")
+                            st.write("---")
+
+                    # Add button to select all problematic files
+                    if st.sidebar.button("Select All Problematic Files"):
+                        st.session_state.selected_files = {
+                            item['file']['Id']: item['file'] for item in problematic_files
+                        }
+                        logger.info(f"Selected all problematic files: {len(problematic_files)} total")
+                        st.rerun()
+                else:
+                    st.sidebar.success("No problematic files found")
+
         # Bulk rename controls in sidebar
         st.sidebar.write("### Bulk Rename")
 
@@ -124,8 +158,8 @@ def show_file_manager(library_name):
         # Add select all button
         if st.sidebar.button("Select All Files"):
             st.session_state.selected_files = {
-                file['Id']: file 
-                for files in files_by_path.values() 
+                file['Id']: file
+                for files in files_by_path.values()
                 for file in files
             }
             logger.info(f"Selected all files: {len(st.session_state.selected_files)} total")
@@ -202,7 +236,7 @@ def show_file_manager(library_name):
 
                     with col1:
                         # Checkbox for selection
-                        is_selected = st.checkbox("", key=f"select_{file['Id']}", 
+                        is_selected = st.checkbox("", key=f"select_{file['Id']}",
                                                     value=file['Id'] in st.session_state.selected_files)
                         if is_selected:
                             st.session_state.selected_files[file['Id']] = file
@@ -210,9 +244,18 @@ def show_file_manager(library_name):
                             del st.session_state.selected_files[file['Id']]
 
                     with col2:
+                        full_path = (file.get('ParentPath', '') + '/' + file['Name']).strip('/')
                         st.write(f"📄 {file['Name']}")
-                        if len(file['Name']) > 128:
-                            st.warning("Long filename!")
+                        name_length = len(file['Name'])
+                        path_length = len(full_path)
+
+                        if name_length > 128 or path_length > 256:
+                            warning_msg = []
+                            if name_length > 128:
+                                warning_msg.append(f"Long filename ({name_length} chars)")
+                            if path_length > 256:
+                                warning_msg.append(f"Long path ({path_length} chars)")
+                            st.warning(" & ".join(warning_msg))
 
     except Exception as e:
         st.error(f"Error loading files: {str(e)}")
@@ -284,7 +327,7 @@ def authenticate():
         return
 
     with st.form("authentication_form"):
-        site_url = st.text_input("SharePoint Site URL", 
+        site_url = st.text_input("SharePoint Site URL",
                                 help="Enter the full SharePoint site URL (e.g., https://your-tenant.sharepoint.com/sites/your-site)")
 
         st.info("Make sure you have configured your Azure AD credentials in the Setup Guide before connecting.")
@@ -347,20 +390,6 @@ def show_library_selector():
 
         selected_library = st.selectbox("Select SharePoint Library", libraries)
         if selected_library:
-            # Add scan button in sidebar
-            if st.sidebar.button("🔍 Scan for Long Paths"):
-                with st.spinner("Scanning for problematic file paths..."):
-                    problematic_files = st.session_state.client.scan_for_long_paths(selected_library)
-                    if problematic_files:
-                        st.sidebar.warning(f"Found {len(problematic_files)} files with long paths")
-                        with st.sidebar.expander("View Problematic Files"):
-                            for file in problematic_files:
-                                st.write(f"📄 {file['name']}")
-                                st.write(f"Length: {file['full_path_length']} characters")
-                                st.write("---")
-                    else:
-                        st.sidebar.success("No problematic file paths found")
-
             show_file_manager(selected_library)
     except Exception as e:
         st.error(f"Error loading libraries: {str(e)}")
@@ -368,7 +397,6 @@ def show_library_selector():
         if "authentication" in str(e).lower():
             st.session_state.authenticated = False
             st.rerun()
-
 
 
 if __name__ == "__main__":
