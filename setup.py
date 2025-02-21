@@ -28,11 +28,14 @@ def show_setup_guide():
     3. Select "Microsoft Graph"
     4. Choose "Application permissions"
     5. Add these permissions:
-        - Sites.Read.All
-        - Sites.ReadWrite.All
+        - Sites.Read.All (Required for basic file listing and reading)
+        - Sites.ReadWrite.All (Required for file operations and test library creation)
+        - Sites.Manage.All (Required for creating and managing test libraries)
     6. Click "Grant admin consent" (requires admin privileges)
+
+    Note: The test library feature requires both Sites.ReadWrite.All and Sites.Manage.All permissions to create and populate sample data.
     """)
-    
+
     st.write("### Step 3: Create Client Secret")
     st.markdown("""
     1. Go to "Certificates & secrets"
