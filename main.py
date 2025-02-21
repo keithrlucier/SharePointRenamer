@@ -600,6 +600,7 @@ def show_login():
                     else:
                         st.session_state['user'] = user.id
                         st.session_state['is_admin'] = user.is_admin
+                        st.session_state['authenticated'] = True
                         st.success("Login successful!")
                         time.sleep(1)
                         st.rerun()
@@ -617,6 +618,7 @@ def show_login():
                     if user.verify_mfa(mfa_code):
                         st.session_state['user'] = user.id
                         st.session_state['is_admin'] = user.is_admin
+                        st.session_state['authenticated'] = True
                         del st.session_state['pending_mfa_user']
                         st.success("MFA verification successful!")
                         time.sleep(1)
@@ -834,6 +836,18 @@ def main():
 
     if 'user' not in st.session_state:
         show_login()
+        return
+
+    # Add logout button in sidebar
+    if st.sidebar.button("Logout"):
+        del st.session_state['user']
+        if 'is_admin' in st.session_state:
+            del st.session_state['is_admin']
+        st.rerun()
+
+    # Show admin panel for admin users
+    if st.session_state.get('is_admin', False):
+        show_admin_panel()
         return
 
     # Show appropriate page based on navigation state
