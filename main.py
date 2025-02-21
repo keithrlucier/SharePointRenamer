@@ -33,39 +33,38 @@ def apply_rename_pattern(filename, pattern):
     try:
         # Handle "Extract Last Part" pattern type
         if pattern == "__extract_last_part__":
-            # Split by various delimiters and get the last part
-            delimiters = [' - ', '-', '_']
+            # Split by various delimiters and get meaningful parts
+            delimiters = [' - ', '-', '_', 'IN THE MATTER OF', 'ORDER NO', 'MOTION TO']
             name = filename
+            name_without_ext, ext = os.path.splitext(name)
+
+            # Try each delimiter
             for delimiter in delimiters:
-                if delimiter in name:
-                    name = name.split(delimiter)[-1].strip()
+                if delimiter in name_without_ext:
+                    parts = name_without_ext.split(delimiter)
+                    # Get the last meaningful part
+                    last_part = parts[-1].strip()
+                    # If last part is still too long, take first 60 chars
+                    if len(last_part) > 60:
+                        last_part = last_part[:57] + "..."
+                    name = last_part + ext
+                    break
+
+            # If still too long after extraction, force truncate
+            if len(name) > 128:
+                name_part, ext_part = os.path.splitext(name)
+                name = name_part[:120] + "..." + ext_part
+
             return sanitize_filename(name)
 
         # Extract the file extension
         name, ext = os.path.splitext(filename)
 
         # If filename is too long (over 128 chars), intelligently truncate it
-        if len(filename) > 128:
+        if len(name) > 128:
             # Calculate maximum name length (reserve space for extension)
             max_name_length = 128 - len(ext)
-
-            if len(name) > max_name_length:
-                # Split into meaningful parts
-                parts = re.split(r'[-_\s]+', name)
-
-                # Keep first few words and last few words
-                if len(parts) > 4:
-                    # Keep first 2 and last 2 meaningful parts
-                    shortened_name = f"{' '.join(parts[:2])}...{' '.join(parts[-2:])}"
-                else:
-                    # If few parts, just truncate with ellipsis
-                    shortened_name = name[:max_name_length - 3] + "..."
-
-                # Ensure final length is within limits
-                if len(shortened_name) > max_name_length:
-                    shortened_name = shortened_name[:max_name_length - 3] + "..."
-
-                name = shortened_name
+            name = name[:max_name_length - 3] + "..."
 
         # Replace placeholders in pattern
         new_name = pattern.replace('{name}', name).replace('{ext}', ext)
@@ -73,7 +72,7 @@ def apply_rename_pattern(filename, pattern):
         # Final length check and truncation if needed
         if len(new_name) > 128:
             name_part, ext_part = os.path.splitext(new_name)
-            new_name = name_part[:128 - len(ext_part) - 3] + "..." + ext_part
+            new_name = name_part[:120] + "..." + ext_part
 
         # Sanitize the new name
         return sanitize_filename(new_name)
