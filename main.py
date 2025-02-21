@@ -175,7 +175,7 @@ def show_file_manager(library_name):
             logger.info("Cleared all file selections")
             st.rerun()
 
-        # Direct bulk rename button
+        # Bulk rename button and logic
         if st.sidebar.button("Rename Selected Files"):
             logger.info(f"Attempting bulk rename with pattern: {rename_pattern}")
             logger.info(f"Selected files count: {len(st.session_state.selected_files)}")
@@ -222,9 +222,21 @@ def show_file_manager(library_name):
                                 st.error(error_msg)
                                 logger.error(error_msg)
 
-                    st.session_state.selected_files = {}
-                    time.sleep(1)
-                    st.rerun()
+                    # Only clear selection after successful operations
+                    if success_count == len(rename_operations):
+                        st.session_state.selected_files = {}
+                        st.session_state.problematic_files = []
+                        time.sleep(1)
+                        st.rerun()
+                    else:
+                        # Keep failed files selected for retry
+                        failed_ids = {r['file_id'] for r in failed}
+                        st.session_state.selected_files = {
+                            file_id: file 
+                            for file_id, file in st.session_state.selected_files.items()
+                            if file_id in failed_ids
+                        }
+                        st.warning("Some files were not renamed. They remain selected for retry.")
             else:
                 st.error("No valid rename operations could be created. Check the filename pattern.")
                 logger.error("No valid rename operations could be created")
