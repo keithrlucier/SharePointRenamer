@@ -5,6 +5,7 @@ from azure.identity import ClientSecretCredential
 import requests
 from urllib.parse import urlparse
 import datetime
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -339,7 +340,7 @@ class SharePointClient:
                 'Accept': 'application/json'
             }
 
-            # Get drive ID first
+            # First get drive ID
             logger.info("Getting drive ID for log creation")
             response = requests.get(drives_url, headers=headers)
             if response.status_code != 200:
@@ -375,57 +376,71 @@ Reason: {reason}
                 'Content-Type': 'text/plain; charset=utf-8'
             }
 
-            # Handle log file creation/update
-            try:
-                if search_response.status_code == 200 and search_response.json().get('value'):
-                    # File exists, append to it
-                    logger.info("Found existing log file, appending content")
-                    file_id = search_response.json()['value'][0]['id']
+            # Using a retry mechanism for file operations
+            max_retries = 3
+            retry_count = 0
 
-                    # Get current content
-                    get_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/content"
-                    get_response = requests.get(get_url, headers=headers)
+            while retry_count < max_retries:
+                try:
+                    if search_response.status_code == 200 and search_response.json().get('value'):
+                        # File exists, append to it
+                        logger.info("Found existing log file, appending content")
+                        file_id = search_response.json()['value'][0]['id']
 
-                    if get_response.status_code == 200:
-                        # Append new entry to existing content
-                        full_content = get_response.text + log_entry
+                        # Get current content
+                        get_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/content"
+                        get_response = requests.get(get_url, headers=headers)
 
-                        # Update the file
-                        update_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/content"
-                        logger.info("Updating existing log file")
-                        update_response = requests.put(
-                            update_url,
+                        if get_response.status_code == 200:
+                            # Append new entry to existing content
+                            existing_content = get_response.text
+                            # Ensure we're not duplicating entries
+                            if f"Original Name: {original_name}\nNew Name: {new_name}" not in existing_content:
+                                full_content = existing_content + log_entry
+                            else:
+                                logger.info(f"Entry for {original_name} -> {new_name} already exists in log")
+                                return True
+
+                            # Update the file
+                            update_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/content"
+                            logger.info("Updating existing log file")
+                            update_response = requests.put(
+                                update_url,
+                                headers=content_headers,
+                                data=full_content.encode('utf-8')
+                            )
+
+                            if update_response.status_code in [200, 201]:
+                                logger.info("Successfully updated log file")
+                                return True
+                            else:
+                                raise Exception(f"Failed to update log file. Status: {update_response.status_code}")
+                        else:
+                            raise Exception(f"Failed to read existing log file. Status: {get_response.status_code}")
+                    else:
+                        # Create new file
+                        logger.info("Creating new log file")
+                        create_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/root:/{log_filename}:/content"
+                        create_response = requests.put(
+                            create_url,
                             headers=content_headers,
-                            data=full_content.encode('utf-8')
+                            data=log_entry.encode('utf-8')
                         )
 
-                        if update_response.status_code not in [200, 201]:
-                            raise Exception(f"Failed to update log file. Status: {update_response.status_code}")
+                        if create_response.status_code in [200, 201]:
+                            logger.info("Successfully created new log file")
+                            return True
+                        else:
+                            raise Exception(f"Failed to create log file. Status: {create_response.status_code}")
 
-                        logger.info("Successfully updated log file")
-                    else:
-                        raise Exception(f"Failed to read existing log file. Status: {get_response.status_code}")
-                else:
-                    # Create new file
-                    logger.info("Creating new log file")
-                    create_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/root:/{log_filename}:/content"
-                    create_response = requests.put(
-                        create_url,
-                        headers=content_headers,
-                        data=log_entry.encode('utf-8')
-                    )
+                except Exception as e:
+                    retry_count += 1
+                    if retry_count >= max_retries:
+                        raise
+                    logger.warning(f"Retry {retry_count} of {max_retries} for log file operation: {str(e)}")
+                    time.sleep(1)  # Wait before retry
 
-                    if create_response.status_code not in [200, 201]:
-                        raise Exception(f"Failed to create log file. Status: {create_response.status_code}")
-
-                    logger.info("Successfully created new log file")
-
-                logger.info(f"Successfully logged rename operation: {original_name} -> {new_name}")
-                return True
-
-            except Exception as e:
-                logger.error(f"Error handling log file: {str(e)}")
-                raise
+            raise Exception("Max retries exceeded for log file operation")
 
         except Exception as e:
             logger.error(f"Failed to create/update log entry: {str(e)}")
