@@ -322,92 +322,22 @@ class SharePointClient:
         return len(full_path) > max_length
 
     def _create_rename_log(self, library_name, original_name, new_name, reason="Path too long"):
-        """Log file rename operations to a local file and then sync to SharePoint"""
+        """Create a simple local log entry for file rename operations"""
         try:
-            # Create a local log entry
+            # Create a local log entry with timestamp
             timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            log_entry = f"""
-Rename Operation: {timestamp}
-Original Name: {original_name}
-New Name: {new_name}
-Reason: {reason}
-----------------------------------------
-"""
-            # Write to local file first
-            local_log_file = "rename_operations.log"
-            try:
-                with open(local_log_file, "a") as f:
-                    f.write(log_entry)
-                logger.info(f"Logged rename operation locally: {original_name} -> {new_name}")
+            log_entry = f"""[{timestamp}] {library_name}: Renamed "{original_name}" to "{new_name}" ({reason})\n"""
 
-                # Attempt to sync with SharePoint if we have more than 5 entries or it's been 5 minutes
-                self._sync_log_to_sharepoint(library_name, local_log_file)
-                return True
-            except Exception as e:
-                logger.error(f"Failed to write to local log file: {str(e)}")
-                return False
+            # Write directly to local file
+            with open("rename_operations.log", "a", encoding='utf-8') as f:
+                f.write(log_entry)
+                f.flush()  # Ensure it's written immediately
+
+            logger.info(f"Logged rename operation: {original_name} -> {new_name}")
+            return True
 
         except Exception as e:
-            logger.error(f"Failed to create/update log entry: {str(e)}")
-            return False
-
-    def _sync_log_to_sharepoint(self, library_name, local_log_file):
-        """Sync local log file to SharePoint"""
-        try:
-            if not os.path.exists(local_log_file):
-                return False
-
-            # Read local log content
-            with open(local_log_file, 'r') as f:
-                log_content = f.read()
-
-            if not log_content:
-                return False
-
-            # Get drive ID
-            host_part = f"{self.tenant}.sharepoint.com"
-            site_path = self.site_path if self.site_path else ''
-            site_id = f"sites/{host_part}{site_path}"
-            drives_url = f"https://graph.microsoft.com/v1.0/{site_id}/drives"
-
-            headers = {
-                'Authorization': f'Bearer {self.access_token}',
-                'Accept': 'application/json'
-            }
-
-            response = requests.get(drives_url, headers=headers)
-            if response.status_code != 200:
-                raise Exception(f"Failed to get drives. Status code: {response.status_code}")
-
-            drive_id = None
-            for drive in response.json().get('value', []):
-                if drive['name'] == library_name:
-                    drive_id = drive['id']
-                    break
-
-            if not drive_id:
-                raise Exception(f"Library '{library_name}' not found")
-
-            # Upload to SharePoint
-            sharepoint_log_file = "FileRenameLog.txt"
-            content_headers = {
-                'Authorization': f'Bearer {self.access_token}',
-                'Content-Type': 'text/plain; charset=utf-8'
-            }
-
-            upload_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/root:/{sharepoint_log_file}:/content"
-            response = requests.put(upload_url, headers=content_headers, data=log_content.encode('utf-8'))
-
-            if response.status_code in [200, 201]:
-                # Clear local file after successful upload
-                open(local_log_file, 'w').close()
-                logger.info("Successfully synced log file to SharePoint")
-                return True
-            else:
-                raise Exception(f"Failed to upload log file. Status: {response.status_code}")
-
-        except Exception as e:
-            logger.error(f"Failed to sync log to SharePoint: {str(e)}")
+            logger.error(f"Failed to log rename operation: {str(e)}")
             return False
 
     def scan_for_long_paths(self, library_name):
@@ -480,6 +410,9 @@ Reason: {reason}
                     new_name = operation['new_name']
                     old_name = operation['old_name']
 
+                    # First log the attempt
+                    logger.info(f"Attempting to rename: {old_name} -> {new_name}")
+
                     # Update file metadata
                     update_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}"
                     update_data = {'name': new_name}
@@ -487,7 +420,7 @@ Reason: {reason}
                     response = requests.patch(update_url, headers=headers, json=update_data)
 
                     if response.status_code in [200, 201]:
-                        # Create log entry first
+                        # Log the successful rename immediately
                         log_success = self._create_rename_log(
                             library_name,
                             old_name,
@@ -503,6 +436,8 @@ Reason: {reason}
                             'error': None,
                             'logged': log_success
                         })
+
+                        logger.info(f"Successfully renamed {old_name} to {new_name}")
                     else:
                         error_message = response.text
                         results.append({
@@ -513,8 +448,10 @@ Reason: {reason}
                             'error': error_message,
                             'logged': False
                         })
+                        logger.error(f"Failed to rename {old_name}: {error_message}")
 
                 except Exception as e:
+                    logger.error(f"Error processing rename for {old_name}: {str(e)}")
                     results.append({
                         'old_name': old_name,
                         'new_name': new_name,
