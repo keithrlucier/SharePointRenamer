@@ -395,7 +395,7 @@ Reason: {reason}
             raise
 
     def bulk_rename_files(self, library_name, rename_operations):
-        """Enhanced bulk rename with path length validation"""
+        """Enhanced bulk rename with proper batch processing and error handling"""
         try:
             if not self.access_token:
                 self.authenticate()
@@ -434,11 +434,12 @@ Reason: {reason}
                     new_name = operation['new_name']
                     old_name = operation['old_name']
 
-                    # Get current file details
+                    # Verify file exists and get current details
                     file_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}"
                     file_response = requests.get(file_url, headers=headers)
+
                     if file_response.status_code != 200:
-                        raise Exception(f"Failed to get file details. Status code: {file_response.status_code}")
+                        raise Exception(f"Failed to verify file existence. Status code: {file_response.status_code}")
 
                     file_data = file_response.json()
                     parent_path = file_data.get('parentReference', {}).get('path', '')
@@ -446,9 +447,8 @@ Reason: {reason}
                     # Check if new path would be too long
                     new_full_path = self._get_full_path(library_name, f"{parent_path}/{new_name}")
                     if self._is_path_too_long(new_full_path):
-                        # Attempt to create a shorter name while preserving extension
                         name, ext = os.path.splitext(new_name)
-                        truncated_name = name[:20] + "..." + ext  # Preserve extension
+                        truncated_name = name[:20] + "..." + ext
                         new_name = truncated_name
                         logger.warning(f"File path too long, truncating to: {truncated_name}")
 
@@ -459,22 +459,21 @@ Reason: {reason}
                     response = requests.patch(update_url, headers=headers, json=update_data)
 
                     if response.status_code not in [200, 201]:
-                        logger.error(f"Failed to rename file {old_name}. Response: {response.text}")
-                        results.append({
-                            'old_name': old_name,
-                            'new_name': new_name,
-                            'success': False,
-                            'error': f"Status code: {response.status_code}"
-                        })
-                    else:
-                        logger.info(f"Successfully renamed {old_name} to {new_name}")
-                        # Log the rename operation
-                        self._create_rename_log(library_name, old_name, new_name)
-                        results.append({
-                            'old_name': old_name,
-                            'new_name': new_name,
-                            'success': True
-                        })
+                        error_msg = f"Failed to rename {old_name}. Status code: {response.status_code}"
+                        if response.text:
+                            error_msg += f" Response: {response.text}"
+                        raise Exception(error_msg)
+
+                    # Log successful rename
+                    logger.info(f"Successfully renamed {old_name} to {new_name}")
+                    self._create_rename_log(library_name, old_name, new_name)
+
+                    results.append({
+                        'old_name': old_name,
+                        'new_name': new_name,
+                        'success': True,
+                        'file_id': file_id
+                    })
 
                 except Exception as e:
                     logger.error(f"Error renaming file {operation['old_name']}: {str(e)}")
@@ -482,7 +481,8 @@ Reason: {reason}
                         'old_name': operation['old_name'],
                         'new_name': operation['new_name'],
                         'success': False,
-                        'error': str(e)
+                        'error': str(e),
+                        'file_id': operation['file_id']
                     })
 
             return results
