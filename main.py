@@ -12,7 +12,6 @@ import bcrypt
 import pyotp
 from datetime import datetime, timedelta
 from app import app
-from urllib.parse import urlparse
 
 # Setup logging
 setup_logging()
@@ -815,7 +814,7 @@ def show_library_selector():
         if selected_library:
             show_file_manager(selected_library)
     except Exception as e:
-        st.error(f"Error loading libraries: {str(e)}")
+        st.error(f""Error loading libraries: {str(e)}")
         logger.error(f"Error loading libraries: {str(e)}")
         if "authentication" in str(e).lower():
             st.session_state.authenticated = False
@@ -823,26 +822,20 @@ def show_library_selector():
 
 
 
-def setup_ssl_redirect():
-    """Configure SSL redirect for custom domain"""
-    try:
-        # Check if running on Replit with custom domain
-        if 'REPL_SLUG' in os.environ and 'REPL_OWNER' in os.environ:
-            # Get request headers through Streamlit's session state
-            if 'x-forwarded-proto' in st.runtime.scriptrunner.get_script_run_ctx().request.headers:
-                proto = st.runtime.scriptrunner.get_script_run_ctx().request.headers['x-forwarded-proto']
-                if proto == 'http':
-                    st.error("⚠️ Insecure Connection: Please use HTTPS for this application.")
-                    st.stop()
-    except Exception as e:
-        logger.error(f"Error in SSL redirect: {str(e)}")
-        # Continue execution even if SSL check fails
-        pass
-
 def main():
     """Main application entry point"""
     initialize_session_state()
-    setup_ssl_redirect()
+
+    # Add security headers
+    st.markdown("""
+        <meta http-equiv="Content-Security-Policy" 
+              content="default-src 'self' 'unsafe-inline' 'unsafe-eval' data: https://*.streamlit.app https://*.replit.dev https://streamlit.io;">
+        <meta http-equiv="Strict-Transport-Security" 
+              content="max-age=31536000; includeSubDomains">
+        <meta http-equiv="X-Content-Type-Options" content="nosniff">
+        <meta http-equiv="X-Frame-Options" content="SAMEORIGIN">
+    """, unsafe_allow_html=True)
+
     # Check if user is logged in
     if 'user' not in st.session_state:
         show_login()
@@ -869,15 +862,10 @@ def main():
     # Handle page routing based on current_page
     if st.session_state.get('show_setup', False):
         show_setup_guide()
-        return
-
-    if st.session_state.get('show_credentials', False):
+    elif st.session_state.get('show_credentials', False):
         show_credentials_manager()
-        return
-
-    if not st.session_state.authenticated:
+    elif not st.session_state.authenticated:
         st.warning("⚠️ Please connect to SharePoint to access libraries and file management features.")
-        #authenticate() #Removed as authentication is handled by the login screen.
     else:
         show_library_selector()
 
