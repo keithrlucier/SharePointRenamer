@@ -2,6 +2,7 @@ import streamlit as st
 import os
 import logging
 from utils import setup_logging
+from sharepoint_client import SharePointClient
 
 setup_logging()
 logger = logging.getLogger(__name__)
@@ -47,13 +48,30 @@ def show_credentials_manager():
                     os.environ["AZURE_TENANT_ID"] = tenant_id
                     os.environ["AZURE_CLIENT_SECRET"] = client_secret
 
-                    st.success("Credentials saved successfully!")
+                    # Try to initialize SharePoint client to verify credentials
+                    try:
+                        client = SharePointClient(
+                            client_id=client_id,
+                            client_secret=client_secret,
+                            tenant_id=tenant_id
+                        )
+                        st.session_state['client'] = client
+                        st.session_state['authenticated'] = True
+                        logger.info("SharePoint client initialized successfully")
+                    except Exception as e:
+                        logger.error(f"Error initializing SharePoint client: {str(e)}")
+                        st.error("Failed to connect to SharePoint. Please verify your credentials.")
+                        return
+
+                    st.success("Credentials saved and connection verified!")
                     logger.info("Azure credentials updated successfully")
 
                     # Reset navigation state to go back to home/connection page
                     st.session_state['current_page'] = 'home'
                     st.session_state['show_credentials'] = False
                     st.session_state['show_setup'] = False
+
+                    # Force rerun to update the UI
                     st.rerun()
 
                 except Exception as e:
