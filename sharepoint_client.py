@@ -482,6 +482,19 @@ Reason: {reason}
 
                     if response.status_code in [200, 201]:
                         logger.info(f"Successfully renamed {old_name} to {new_name}")
+
+                        # Create rename log entry for this specific file
+                        try:
+                            self._create_rename_log(
+                                library_name,
+                                old_name,
+                                new_name,
+                                reason="Bulk rename operation"
+                            )
+                            logger.info(f"Created log entry for rename: {old_name} -> {new_name}")
+                        except Exception as log_error:
+                            logger.error(f"Failed to create log entry for {old_name}: {str(log_error)}")
+
                         results.append({
                             'old_name': old_name,
                             'new_name': new_name,
@@ -489,11 +502,6 @@ Reason: {reason}
                             'file_id': file_id,
                             'error': None
                         })
-                        # Log the rename operation
-                        try:
-                            self._create_rename_log(library_name, old_name, new_name)
-                        except Exception as log_error:
-                            logger.warning(f"Failed to create rename log: {str(log_error)}")
                     else:
                         error_message = response.text
                         logger.error(f"Failed to rename {old_name}: {error_message}")
