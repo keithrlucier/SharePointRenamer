@@ -180,63 +180,75 @@ def show_file_manager(library_name):
             logger.info(f"Attempting bulk rename with pattern: {rename_pattern}")
             logger.info(f"Selected files count: {len(st.session_state.selected_files)}")
 
-            if not rename_pattern:
-                st.error("Please enter a rename pattern first")
-                return
-
             if not st.session_state.selected_files:
                 st.error("Please select files to rename first")
                 return
 
+            # Create rename operations for all selected files
             rename_operations = []
+
             for file_id, file in st.session_state.selected_files.items():
-                new_name = apply_rename_pattern(file['Name'], rename_pattern)
-                if validate_filename(new_name):
-                    rename_operations.append({
-                        'old_name': file['Name'],
-                        'new_name': new_name,
-                        'file_id': file_id
-                    })
-                    logger.info(f"Added rename operation: {file['Name']} -> {new_name}")
+                try:
+                    current_name = file['Name']
+                    new_name = apply_rename_pattern(current_name, rename_pattern)
+                    logger.info(f"Processing file: {current_name} -> {new_name}")
+
+                    if validate_filename(new_name):
+                        rename_operations.append({
+                            'old_name': current_name,
+                            'new_name': new_name,
+                            'file_id': file_id
+                        })
+                        logger.info(f"Added rename operation: {current_name} -> {new_name}")
+                    else:
+                        logger.warning(f"Invalid new filename for {current_name}: {new_name}")
+                except Exception as e:
+                    logger.error(f"Error preparing rename for {file['Name']}: {str(e)}")
+
+            logger.info(f"Created {len(rename_operations)} rename operations")
 
             if rename_operations:
                 with st.spinner(f"Renaming {len(rename_operations)} files..."):
-                    logger.info(f"Executing {len(rename_operations)} rename operations")
-                    results = st.session_state.client.bulk_rename_files(
-                        library_name,
-                        rename_operations
-                    )
+                    try:
+                        logger.info(f"Executing {len(rename_operations)} rename operations")
+                        results = st.session_state.client.bulk_rename_files(
+                            library_name,
+                            rename_operations
+                        )
 
-                    # Show results summary
-                    success_count = sum(1 for r in results if r['success'])
-                    if success_count > 0:
-                        st.success(f"Successfully renamed {success_count} out of {len(results)} files")
-                        logger.info(f"Successfully renamed {success_count} out of {len(results)} files")
+                        # Show results summary
+                        success_count = sum(1 for r in results if r['success'])
+                        if success_count > 0:
+                            st.success(f"Successfully renamed {success_count} out of {len(results)} files")
+                            logger.info(f"Successfully renamed {success_count} out of {len(results)} files")
 
-                    # Show errors in expandable section if any
-                    failed = [r for r in results if not r['success']]
-                    if failed:
-                        with st.expander("Show Failed Operations"):
-                            for failure in failed:
-                                error_msg = f"Failed to rename {failure['old_name']}: {failure.get('error', 'Unknown error')}"
-                                st.error(error_msg)
-                                logger.error(error_msg)
+                        # Show errors in expandable section if any
+                        failed = [r for r in results if not r['success']]
+                        if failed:
+                            with st.expander("Show Failed Operations"):
+                                for failure in failed:
+                                    error_msg = f"Failed to rename {failure['old_name']}: {failure.get('error', 'Unknown error')}"
+                                    st.error(error_msg)
+                                    logger.error(error_msg)
 
-                    # Only clear selection after successful operations
-                    if success_count == len(rename_operations):
-                        st.session_state.selected_files = {}
-                        st.session_state.problematic_files = []
-                        time.sleep(1)
-                        st.rerun()
-                    else:
-                        # Keep failed files selected for retry
-                        failed_ids = {r['file_id'] for r in failed}
-                        st.session_state.selected_files = {
-                            file_id: file 
-                            for file_id, file in st.session_state.selected_files.items()
-                            if file_id in failed_ids
-                        }
-                        st.warning("Some files were not renamed. They remain selected for retry.")
+                        # Only clear selection after successful operations
+                        if success_count == len(rename_operations):
+                            st.session_state.selected_files = {}
+                            st.session_state.problematic_files = []
+                            time.sleep(1)
+                            st.rerun()
+                        else:
+                            # Keep failed files selected for retry
+                            failed_ids = {r['file_id'] for r in failed}
+                            st.session_state.selected_files = {
+                                file_id: file 
+                                for file_id, file in st.session_state.selected_files.items()
+                                if file_id in failed_ids
+                            }
+                            st.warning("Some files were not renamed. They remain selected for retry.")
+                    except Exception as e:
+                        st.error(f"Error during bulk rename: {str(e)}")
+                        logger.error(f"Error during bulk rename: {str(e)}")
             else:
                 st.error("No valid rename operations could be created. Check the filename pattern.")
                 logger.error("No valid rename operations could be created")
