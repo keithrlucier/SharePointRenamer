@@ -9,21 +9,29 @@ db = SQLAlchemy()
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(120), unique=True, nullable=False)
-    password_hash = db.Column(db.String(128))
+    password_hash = db.Column(db.LargeBinary, nullable=False)  # Store as binary
     is_admin = db.Column(db.Boolean, default=False)
     is_active = db.Column(db.Boolean, default=True)
     mfa_secret = db.Column(db.String(32))
     mfa_enabled = db.Column(db.Boolean, default=False)
     tenant_id = db.Column(db.Integer, db.ForeignKey('tenant.id'))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    
+
     def set_password(self, password):
-        salt = bcrypt.gensalt()
-        self.password_hash = bcrypt.hashpw(password.encode('utf-8'), salt)
-    
+        if isinstance(password, str):
+            password = password.encode('utf-8')
+        self.password_hash = bcrypt.hashpw(password, bcrypt.gensalt())
+
     def check_password(self, password):
-        return bcrypt.checkpw(password.encode('utf-8'), self.password_hash)
-    
+        if not self.password_hash:
+            return False
+        if isinstance(password, str):
+            password = password.encode('utf-8')
+        try:
+            return bcrypt.checkpw(password, self.password_hash)
+        except Exception:
+            return False
+
     def get_mfa_uri(self):
         if not self.mfa_secret:
             self.mfa_secret = pyotp.random_base32()
@@ -31,7 +39,7 @@ class User(UserMixin, db.Model):
             name=self.email,
             issuer_name="SharePoint Manager"
         )
-    
+
     def verify_mfa(self, code):
         if not self.mfa_enabled or not self.mfa_secret:
             return False
