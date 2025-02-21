@@ -25,6 +25,8 @@ def initialize_session_state():
         st.session_state['preview_renames'] = []
     if 'show_setup' not in st.session_state:
         st.session_state['show_setup'] = False
+    if 'problematic_files' not in st.session_state:
+        st.session_state['problematic_files'] = []
 
 def apply_rename_pattern(filename, pattern):
     """Apply rename pattern to filename"""
@@ -75,7 +77,7 @@ def show_file_manager(library_name):
         if st.sidebar.button("🔍 Scan for Long Names & Paths"):
             with st.spinner("Scanning for problematic files..."):
                 # Check both filename and full path length
-                problematic_files = [
+                st.session_state.problematic_files = [
                     {
                         'file': file,
                         'name_length': len(file['Name']),
@@ -86,24 +88,26 @@ def show_file_manager(library_name):
                     if len(file['Name']) > 128 or len(file.get('ParentPath', '') + '/' + file['Name']) > 256
                 ]
 
-                if problematic_files:
-                    st.sidebar.warning(f"Found {len(problematic_files)} problematic files")
+                if st.session_state.problematic_files:
+                    st.sidebar.warning(f"Found {len(st.session_state.problematic_files)} problematic files")
                     with st.sidebar.expander("View Problematic Files"):
-                        for item in problematic_files:
+                        for item in st.session_state.problematic_files:
                             st.write(f"📄 {item['file']['Name']}")
                             st.write(f"Filename length: {item['name_length']} characters")
                             st.write(f"Full path length: {item['path_length']} characters")
                             st.write("---")
-
-                    # Add button to select all problematic files
-                    if st.sidebar.button("Select All Problematic Files"):
-                        st.session_state.selected_files = {
-                            item['file']['Id']: item['file'] for item in problematic_files
-                        }
-                        logger.info(f"Selected all problematic files: {len(problematic_files)} total")
-                        st.rerun()
                 else:
                     st.sidebar.success("No problematic files found")
+                    st.session_state.problematic_files = []
+
+        # Add button to select all problematic files
+        if st.session_state.problematic_files:
+            if st.sidebar.button("Select All Problematic Files"):
+                st.session_state.selected_files = {
+                    item['file']['Id']: item['file'] for item in st.session_state.problematic_files
+                }
+                logger.info(f"Selected all problematic files: {len(st.session_state.problematic_files)} total")
+                st.rerun()
 
         # Bulk rename controls in sidebar
         st.sidebar.write("### Bulk Rename")
