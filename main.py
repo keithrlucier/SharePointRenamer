@@ -44,15 +44,36 @@ def apply_rename_pattern(filename, pattern):
         # Extract the file extension
         name, ext = os.path.splitext(filename)
 
-        # If filename is too long (over 128 chars), truncate it while keeping important parts
+        # If filename is too long (over 128 chars), intelligently truncate it
         if len(filename) > 128:
-            # Keep first 100 characters of name (or less if extension is long)
-            max_name_length = 128 - len(ext)  # Reserve space for extension
+            # Calculate maximum name length (reserve space for extension)
+            max_name_length = 128 - len(ext)
+
             if len(name) > max_name_length:
-                name = name[:max_name_length - 3] + "..."
+                # Split into meaningful parts
+                parts = re.split(r'[-_\s]+', name)
+
+                # Keep first few words and last few words
+                if len(parts) > 4:
+                    # Keep first 2 and last 2 meaningful parts
+                    shortened_name = f"{' '.join(parts[:2])}...{' '.join(parts[-2:])}"
+                else:
+                    # If few parts, just truncate with ellipsis
+                    shortened_name = name[:max_name_length - 3] + "..."
+
+                # Ensure final length is within limits
+                if len(shortened_name) > max_name_length:
+                    shortened_name = shortened_name[:max_name_length - 3] + "..."
+
+                name = shortened_name
 
         # Replace placeholders in pattern
         new_name = pattern.replace('{name}', name).replace('{ext}', ext)
+
+        # Final length check and truncation if needed
+        if len(new_name) > 128:
+            name_part, ext_part = os.path.splitext(new_name)
+            new_name = name_part[:128 - len(ext_part) - 3] + "..." + ext_part
 
         # Sanitize the new name
         return sanitize_filename(new_name)

@@ -546,24 +546,7 @@ Reason: {reason}
                 logger.info("Creating new Test Library...")
                 response = requests.post(lists_url, headers=headers, json=library_data)
 
-                if response.status_code == 403:
-                    error_msg = """
-                    Access Denied: Your Azure AD application needs additional permissions.
-
-                    Please ensure your Azure AD application has these permissions:
-                    1. Sites.ReadWrite.All
-                    2. Sites.Manage.All
-
-                    To add these permissions:
-                    1. Go to Azure Portal -> App Registrations
-                    2. Select your application
-                    3. Click on 'API Permissions'
-                    4. Add the permissions above
-                    5. Click 'Grant admin consent'
-                    """
-                    logger.error(error_msg)
-                    raise Exception(error_msg)
-                elif response.status_code not in [200, 201]:
+                if response.status_code != 200 and response.status_code != 201:
                     logger.error(f"Failed to create library. Response: {response.text}")
                     raise Exception(f"Failed to create Test Library. Status code: {response.status_code}")
 
@@ -582,17 +565,52 @@ Reason: {reason}
 
                 logger.info("Created Test Library successfully")
 
-            # Create sample folder structure and files
+            # Create sample files with different naming patterns
+            sample_files = [
+                # Deep nested path with long filename
+                {
+                    "path": "Very Long Path Example/Subfolder Level 1/Subfolder Level 2/Subfolder Level 3/Deep Nested Files/MEMORANDUM OF LAW IN SUPPORT OF DEFENDANTS MOTION TO DISMISS PLAINTIFFS FIRST AMENDED COMPLAINT FOR LACK OF PERSONAL JURISDICTION AND IMPROPER VENUE OR IN THE ALTERNATIVE MOTION TO TRANSFER VENUE.docx",
+                    "content": "This file has both a long path and a long filename."
+                },
+                # Very long filename with repetitive text
+                {
+                    "path": "IN THE MATTER OF CERTAIN WIRELESS DEVICES WITH 3G AND-OR 4G CAPABILITIES AND COMPONENTS THEREOF ORDER NO. 85- GRANTING COMPLAINANT INTERDIGITALS MOTION TO STRIKE PORTIONS OF THE EXPERT REPORT OF DR. JAMES OLIVIER BASED ON NEW CONTENTIONS.txt",
+                    "content": "This is an example of a very long filename that might cause issues."
+                },
+                # Long filename with special characters
+                {
+                    "path": "NOTICE OF FILING DEFENDANTS RESPONSE TO PLAINTIFFS FIRST SET OF INTERROGATORIES AND REQUEST FOR PRODUCTION OF DOCUMENTS - EXHIBIT A - CONFIDENTIAL - UNDER SEAL.pdf",
+                    "content": "Sample long filename document with special characters"
+                },
+                # Multiple similar files with long names
+                {
+                    "path": "CASE TYH911 DST STATE OF FLORIDA E2E/Pleadings/FIRST AMENDED COMPLAINT FOR DAMAGES AND DEMAND FOR JURY TRIAL - VERSION 1 - FINAL - APPROVED BY CLIENT.pdf",
+                    "content": "First version of the document"
+                },
+                {
+                    "path": "CASE TYH911 DST STATE OF FLORIDA E2E/Pleadings/FIRST AMENDED COMPLAINT FOR DAMAGES AND DEMAND FOR JURY TRIAL - VERSION 2 - FINAL - APPROVED BY PARTNER.pdf",
+                    "content": "Second version of the document"
+                },
+                # Files with same prefix but different content
+                {
+                    "path": "CASE TYH911 DST STATE OF FLORIDA E2E/Discovery/PLAINTIFFS FIRST SET OF INTERROGATORIES TO DEFENDANT - PART 1 OF 3 - QUESTIONS 1-50.pdf",
+                    "content": "Part 1"
+                },
+                {
+                    "path": "CASE TYH911 DST STATE OF FLORIDA E2E/Discovery/PLAINTIFFS FIRST SET OF INTERROGATORIES TO DEFENDANT - PART 2 OF 3 - QUESTIONS 51-100.pdf",
+                    "content": "Part 2"
+                }
+            ]
+
             root_url = f"https://graph.microsoft.com/v1.0/drives/{test_library_id}/root"
 
-            # Create sample folders with varying depths
-            folders = [
+            # Create necessary folders first
+            folders = {
                 "CASE TYH911 DST STATE OF FLORIDA E2E",
-                "CASE TYH911 DST STATE OF FLORIDA E2E/Pleadings and Court Documents",
-                "CASE TYH911 DST STATE OF FLORIDA E2E/Discovery Requests",
-                "CASE TYH911 DST STATE OF FLORIDA E2E/Expert Reports and Analysis",
+                "CASE TYH911 DST STATE OF FLORIDA E2E/Pleadings",
+                "CASE TYH911 DST STATE OF FLORIDA E2E/Discovery",
                 "Very Long Path Example/Subfolder Level 1/Subfolder Level 2/Subfolder Level 3/Deep Nested Files"
-            ]
+            }
 
             for folder_path in folders:
                 folder_url = f"{root_url}:/{folder_path}:"
@@ -603,26 +621,7 @@ Reason: {reason}
                 else:
                     logger.info(f"Created folder: {folder_path}")
 
-            # Create sample files with different naming patterns
-            sample_files = [
-                {
-                    "path": "CASE TYH911 DST STATE OF FLORIDA E2E/Simple File.txt",
-                    "content": "This is a simple test file."
-                },
-                {
-                    "path": "CASE TYH911 DST STATE OF FLORIDA E2E/Pleadings and Court Documents/NOTICE OF FILING DEFENDANTS RESPONSE TO PLAINTIFFS FIRST SET OF INTERROGATORIES AND REQUEST FOR PRODUCTION OF DOCUMENTS.pdf",
-                    "content": "Sample long filename document"
-                },
-                {
-                    "path": "CASE TYH911 DST STATE OF FLORIDA E2E/Expert Reports and Analysis/IN THE MATTER OF CERTAIN WIRELESS DEVICES WITH 3G AND-OR 4G CAPABILITIES AND COMPONENTS THEREOF ORDER NO. 85- GRANTING COMPLAINANT INTERDIGITALS MOTION TO STRIKE PORTIONS OF THE EXPERT REPORT OF DR. JAMES OLIVIER BASED ON NEW CONTENTIONS AND TO PRECL.txt",
-                    "content": "This is an example of a very long filename that might cause issues."
-                },
-                {
-                    "path": "Very Long Path Example/Subfolder Level 1/Subfolder Level 2/Subfolder Level 3/Deep Nested Files/MEMORANDUM OF LAW IN SUPPORT OF DEFENDANTS MOTION TO DISMISS PLAINTIFFS FIRST AMENDED COMPLAINT FOR LACK OF PERSONAL JURISDICTION AND IMPROPER VENUE OR IN THE ALTERNATIVE MOTION TO TRANSFER VENUE.docx",
-                    "content": "This file has both a long path and a long filename."
-                }
-            ]
-
+            # Create the sample files
             for file_info in sample_files:
                 file_url = f"{root_url}:/{file_info['path']}:/content"
                 file_response = requests.put(
