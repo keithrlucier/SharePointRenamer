@@ -45,21 +45,27 @@ class User(UserMixin, db.Model):
         )
 
     def verify_mfa(self, code):
-        """Verify MFA code with a larger window to account for time drift"""
+        """Verify MFA code with extended validation and error handling"""
         if not self.mfa_enabled or not self.mfa_secret or not code:
             logger.warning(f"MFA verification failed: Invalid state for user {self.email}")
             return False
 
         try:
-            # Validate code format
+            # Basic validation
+            if not isinstance(code, str):
+                logger.warning(f"Invalid code type for user {self.email}")
+                return False
+
+            # Format validation
+            code = code.strip()  # Remove any whitespace
             if not code.isdigit() or len(code) != 6:
                 logger.warning(f"Invalid code format for user {self.email}")
                 return False
 
             totp = pyotp.TOTP(self.mfa_secret)
-            # Increase window size to ±3 intervals (±90 seconds)
-            # This gives more tolerance for time drift
-            return totp.verify(code, valid_window=3)
+            # Increase window size to ±4 intervals (±120 seconds)
+            # This gives even more tolerance for time drift
+            return totp.verify(code, valid_window=4)
         except Exception as e:
             logger.error(f"MFA verification error for user {self.email}: {str(e)}")
             return False

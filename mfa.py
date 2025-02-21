@@ -33,14 +33,6 @@ def show_mfa_setup():
                - Microsoft Authenticator (recommended)
                - Google Authenticator
                - Authy
-
-            2. Open your authenticator app and add a new account:
-               - Click '+' or 'Add Account'
-               - Choose 'Scan QR Code'
-               - When prompted, select "Work or school account"
-
-            3. Scan the QR code below
-            4. Enter the 6-digit code shown in your authenticator app
             """)
 
             try:
@@ -48,8 +40,8 @@ def show_mfa_setup():
                 qr = qrcode.QRCode(
                     version=1,
                     error_correction=qrcode.constants.ERROR_CORRECT_L,
-                    box_size=6,  # Reduced from 10
-                    border=2,    # Reduced from 4
+                    box_size=6,
+                    border=2,
                 )
                 qr.add_data(user.get_mfa_uri())
                 qr.make(fit=True)
@@ -66,19 +58,20 @@ def show_mfa_setup():
                 st.write("Or enter this code manually in your authenticator app:")
                 st.code(user.mfa_secret)
 
+                # Important warning before verification
+                st.warning("⚠️ Important: Please follow these steps carefully:", icon="⚠️")
+                st.markdown("""
+                1. Wait for a new code to appear in your authenticator
+                2. Enter the code immediately when it appears
+                3. Make sure your device's time is correctly synchronized
+                4. Only use digits 0-9 (no spaces or special characters)
+                """)
+
+                # Account type confirmation with emphasis
+                st.info("🔍 Important: Make sure you've selected 'Work or school account' in your authenticator app")
+
                 # Verification form
                 with st.form("mfa_setup_form"):
-                    st.warning("⚠️ Important: Please follow these steps carefully:", icon="⚠️")
-                    st.markdown("""
-                    1. Wait for a new code to appear in your authenticator
-                    2. Enter the code immediately when it appears
-                    3. Make sure your device's time is correctly synchronized
-                    4. Only use digits 0-9 (no spaces or special characters)
-                    """)
-
-                    # Add account type confirmation with visual emphasis
-                    st.info("🔍 Important: Make sure you've selected 'Work or school account' in your authenticator app")
-
                     verification_code = st.text_input(
                         "Enter verification code from your authenticator app",
                         help="Enter the 6-digit code shown in your authenticator app",
@@ -86,15 +79,15 @@ def show_mfa_setup():
                         placeholder="123456"
                     )
 
-                    # Add visual guidance
+                    # Real-time validation feedback
                     if verification_code:
                         if not verification_code.isdigit():
                             st.error("Please enter only numbers (0-9)")
                         elif len(verification_code) != 6:
                             st.error("Code must be exactly 6 digits")
 
+                    # Submit button and verification logic
                     submit = st.form_submit_button("Verify and Enable 2FA")
-
                     if submit:
                         if not verification_code:
                             st.error("Please enter a verification code.")
