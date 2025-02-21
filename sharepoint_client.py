@@ -322,12 +322,49 @@ class SharePointClient:
         return len(full_path) > max_length
 
     def _create_rename_log(self, library_name, original_name, new_name, reason="Path too long"):
-        """Log file rename operations to a log file in the library"""
+        """Log file rename operations to a local file and then sync to SharePoint"""
         try:
-            if not self.access_token:
-                self.authenticate()
+            # Create a local log entry
+            timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            log_entry = f"""
+Rename Operation: {timestamp}
+Original Name: {original_name}
+New Name: {new_name}
+Reason: {reason}
+----------------------------------------
+"""
+            # Write to local file first
+            local_log_file = "rename_operations.log"
+            try:
+                with open(local_log_file, "a") as f:
+                    f.write(log_entry)
+                logger.info(f"Logged rename operation locally: {original_name} -> {new_name}")
 
-            # Get drive ID for the library
+                # Attempt to sync with SharePoint if we have more than 5 entries or it's been 5 minutes
+                self._sync_log_to_sharepoint(library_name, local_log_file)
+                return True
+            except Exception as e:
+                logger.error(f"Failed to write to local log file: {str(e)}")
+                return False
+
+        except Exception as e:
+            logger.error(f"Failed to create/update log entry: {str(e)}")
+            return False
+
+    def _sync_log_to_sharepoint(self, library_name, local_log_file):
+        """Sync local log file to SharePoint"""
+        try:
+            if not os.path.exists(local_log_file):
+                return False
+
+            # Read local log content
+            with open(local_log_file, 'r') as f:
+                log_content = f.read()
+
+            if not log_content:
+                return False
+
+            # Get drive ID
             host_part = f"{self.tenant}.sharepoint.com"
             site_path = self.site_path if self.site_path else ''
             site_id = f"sites/{host_part}{site_path}"
@@ -338,7 +375,6 @@ class SharePointClient:
                 'Accept': 'application/json'
             }
 
-            # Get drive ID
             response = requests.get(drives_url, headers=headers)
             if response.status_code != 200:
                 raise Exception(f"Failed to get drives. Status code: {response.status_code}")
@@ -352,52 +388,26 @@ class SharePointClient:
             if not drive_id:
                 raise Exception(f"Library '{library_name}' not found")
 
-            # Prepare log entry
-            timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            log_entry = f"""
-Rename Operation: {timestamp}
-Original Name: {original_name}
-New Name: {new_name}
-Reason: {reason}
-----------------------------------------
-"""
-            # Check if log file exists
-            log_filename = "FileRenameLog.txt"
-            search_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/root/search(q='{log_filename}')"
-            search_response = requests.get(search_url, headers=headers)
-
+            # Upload to SharePoint
+            sharepoint_log_file = "FileRenameLog.txt"
             content_headers = {
                 'Authorization': f'Bearer {self.access_token}',
                 'Content-Type': 'text/plain; charset=utf-8'
             }
 
-            if search_response.status_code == 200 and search_response.json().get('value'):
-                # File exists, get its content and append
-                file_id = search_response.json()['value'][0]['id']
-                get_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/content"
-                get_response = requests.get(get_url, headers=headers)
+            upload_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/root:/{sharepoint_log_file}:/content"
+            response = requests.put(upload_url, headers=content_headers, data=log_content.encode('utf-8'))
 
-                if get_response.status_code == 200:
-                    full_content = get_response.text + log_entry
-                    update_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/content"
-                    update_response = requests.put(update_url, headers=content_headers, data=full_content.encode('utf-8'))
-
-                    if update_response.status_code not in [200, 201]:
-                        raise Exception(f"Failed to update log file. Status: {update_response.status_code}")
-                else:
-                    raise Exception(f"Failed to get log file content. Status: {get_response.status_code}")
+            if response.status_code in [200, 201]:
+                # Clear local file after successful upload
+                open(local_log_file, 'w').close()
+                logger.info("Successfully synced log file to SharePoint")
+                return True
             else:
-                # Create new file
-                create_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/root:/{log_filename}:/content"
-                create_response = requests.put(create_url, headers=content_headers, data=log_entry.encode('utf-8'))
-
-                if create_response.status_code not in [200, 201]:
-                    raise Exception(f"Failed to create log file. Status: {create_response.status_code}")
-
-            return True
+                raise Exception(f"Failed to upload log file. Status: {response.status_code}")
 
         except Exception as e:
-            logger.error(f"Failed to create/update log entry: {str(e)}")
+            logger.error(f"Failed to sync log to SharePoint: {str(e)}")
             return False
 
     def scan_for_long_paths(self, library_name):
