@@ -503,13 +503,13 @@ Reason: {reason}
                 'Content-Type': 'application/json'
             }
 
-            # First, create the test library if it doesn't exist
+            # First, check if Test Library exists
             host_part = f"{self.tenant}.sharepoint.com"
             site_path = self.site_path if self.site_path else ''
             site_id = f"sites/{host_part}{site_path}"
-
-            # Check if Test Library exists
             drives_url = f"https://graph.microsoft.com/v1.0/{site_id}/drives"
+
+            logger.info(f"Checking for existing Test Library at {drives_url}")
             response = requests.get(drives_url, headers=headers)
 
             if response.status_code != 200:
@@ -522,21 +522,39 @@ Reason: {reason}
                 if drive['name'] == "Test Library":
                     test_library_exists = True
                     test_library_id = drive['id']
+                    logger.info("Found existing Test Library")
                     break
 
             if not test_library_exists:
-                # Create Test Library
-                create_library_url = f"https://graph.microsoft.com/v1.0/{site_id}/drives"
+                # Create Test Library using SharePoint site endpoint
+                lists_url = f"https://graph.microsoft.com/v1.0/{site_id}/lists"
                 library_data = {
-                    "name": "Test Library",
-                    "driveType": "documentLibrary"
+                    "displayName": "Test Library",
+                    "list": {
+                        "template": "documentLibrary"
+                    }
                 }
-                response = requests.post(create_library_url, headers=headers, json=library_data)
+
+                logger.info("Creating new Test Library...")
+                response = requests.post(lists_url, headers=headers, json=library_data)
 
                 if response.status_code not in [200, 201]:
+                    logger.error(f"Failed to create library. Response: {response.text}")
                     raise Exception(f"Failed to create Test Library. Status code: {response.status_code}")
 
-                test_library_id = response.json()['id']
+                # Get the drive ID for the newly created library
+                response = requests.get(drives_url, headers=headers)
+                if response.status_code != 200:
+                    raise Exception("Failed to get drives after creation")
+
+                for drive in response.json().get('value', []):
+                    if drive['name'] == "Test Library":
+                        test_library_id = drive['id']
+                        break
+
+                if not test_library_id:
+                    raise Exception("Could not find Test Library after creation")
+
                 logger.info("Created Test Library successfully")
 
             # Create sample folder structure and files
