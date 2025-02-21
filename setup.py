@@ -6,7 +6,7 @@ setup_logging()
 logger = logging.getLogger(__name__)
 
 def show_setup_guide():
-    st.title("SharePoint File Manager Setup Guide")
+    st.write("### Setup Guide")
 
     st.write("### Step 1: Register Azure AD Application")
     st.markdown("""

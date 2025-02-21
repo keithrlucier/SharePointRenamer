@@ -6,11 +6,62 @@ import time
 import re
 import os
 from setup import show_setup_guide
-from credentials import show_credentials_manager # Added import
+from credentials import show_credentials_manager
 
 # Setup logging
 setup_logging()
 logger = logging.getLogger(__name__)
+
+# App version
+APP_VERSION = "1.0.0"
+
+def show_navigation():
+    """Display consistent navigation header"""
+    st.markdown("""
+    <style>
+    .nav-container {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 1rem 0;
+        border-bottom: 1px solid #e5e5e5;
+        margin-bottom: 2rem;
+    }
+    .nav-title {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    .nav-version {
+        font-size: 0.8rem;
+        color: #666;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+    col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
+
+    with col1:
+        st.markdown(f"# SharePoint File Name Manager <span class='nav-version'>v{APP_VERSION}</span>", unsafe_allow_html=True)
+
+    with col2:
+        if st.button("📚 Setup Guide", key="nav_setup"):
+            st.session_state['show_setup'] = True
+            st.session_state['show_credentials'] = False
+            st.rerun()
+
+    with col3:
+        if st.button("⚙️ Credentials", key="nav_credentials"):
+            st.session_state['show_credentials'] = True
+            st.session_state['show_setup'] = False
+            st.rerun()
+
+    with col4:
+        if st.session_state.get('authenticated', False):
+            if st.button("🔄 Rename Files", key="nav_rename"):
+                st.session_state['show_setup'] = False
+                st.session_state['show_credentials'] = False
+                st.rerun()
 
 def initialize_session_state():
     """Initialize session state variables"""
@@ -354,6 +405,8 @@ def main():
 
     # Initialize session state first
     initialize_session_state()
+    show_navigation()
+
 
     if not st.session_state.authenticated:
         authenticate()
@@ -374,11 +427,13 @@ def authenticate():
     with col1:
         if st.button("⚙️ Manage Azure AD Credentials", key="auth_manage_creds"):
             st.session_state['show_credentials'] = True
+            st.session_state['show_setup'] = False
             st.rerun()
 
     with col2:
         if st.button("📚 View Setup Guide", key="auth_setup_guide"):
             st.session_state['show_setup'] = True
+            st.session_state['show_credentials'] = False
             st.rerun()
 
     if st.session_state.get('show_credentials', False):
