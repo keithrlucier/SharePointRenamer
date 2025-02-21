@@ -6,6 +6,7 @@ import time
 import re
 import os
 from setup import show_setup_guide
+from credentials import show_credentials_manager # Added import
 
 # Setup logging
 setup_logging()
@@ -25,6 +26,8 @@ def initialize_session_state():
         st.session_state['preview_renames'] = []
     if 'show_setup' not in st.session_state:
         st.session_state['show_setup'] = False
+    if 'show_credentials' not in st.session_state:
+        st.session_state['show_credentials'] = False
     if 'problematic_files' not in st.session_state:
         st.session_state['problematic_files'] = []
 
@@ -366,10 +369,19 @@ def authenticate():
     """Handle SharePoint authentication"""
     st.write("### SharePoint Authentication")
 
+    # Add credentials management button
+    if st.button("⚙️ Manage Azure AD Credentials"):
+        st.session_state['show_credentials'] = True
+        st.rerun()
+
     # Add setup guide button
     if st.button("📚 View Setup Guide"):
         st.session_state['show_setup'] = True
         st.rerun()
+
+    if st.session_state.get('show_credentials', False):
+        show_credentials_manager()
+        return
 
     if st.session_state.get('show_setup', False):
         show_setup_guide()
@@ -382,7 +394,7 @@ def authenticate():
         site_url = st.text_input("SharePoint Site URL",
                                 help="Enter the full SharePoint site URL (e.g., https://your-tenant.sharepoint.com/sites/your-site)")
 
-        st.info("Make sure you have configured your Azure AD credentials in the Setup Guide before connecting.")
+        st.info("Make sure you have configured your Azure AD credentials before connecting.")
 
         submit = st.form_submit_button("Connect")
 
