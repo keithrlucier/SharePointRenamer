@@ -35,9 +35,10 @@ with app.app_context():
             db.session.commit()
             logging.info("Created default tenant")
 
-        # Check if admin user exists
-        admin = User.query.filter_by(email='admin@example.com').first()
-        if not admin:
+        # Check if any admin user exists
+        admin_exists = User.query.filter_by(is_admin=True).first() is not None
+        if not admin_exists:
+            # Create initial admin user only if no admin exists
             admin = User(
                 email='admin@example.com',
                 is_admin=True,
