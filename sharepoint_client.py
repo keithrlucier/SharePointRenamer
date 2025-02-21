@@ -4,6 +4,7 @@ import re
 from azure.identity import ClientSecretCredential
 import requests
 from urllib.parse import urlparse
+import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -298,13 +299,103 @@ class SharePointClient:
             logger.error(f"Failed to rename file {old_name}: {str(e)}")
             raise
 
+    def _get_full_path(self, library_name, file_path):
+        """Calculate the full path length including SharePoint URL"""
+        # Base SharePoint URL + Library + File path
+        full_path = f"{self.site_url}/{library_name}/{file_path}"
+        return full_path
+
+    def _is_path_too_long(self, full_path, max_length=240):
+        """Check if path length exceeds safe limit"""
+        return len(full_path) > max_length
+
+    def _create_rename_log(self, library_name, original_name, new_name, reason="Path too long"):
+        """Log file rename operations to a log file in the library"""
+        try:
+            # Get drive ID for the library
+            host_part = f"{self.tenant}.sharepoint.com"
+            site_path = self.site_path if self.site_path else ''
+            site_id = f"sites/{host_part}{site_path}"
+            drives_url = f"https://graph.microsoft.com/v1.0/{site_id}/drives"
+
+            response = requests.get(drives_url, headers={'Authorization': f'Bearer {self.access_token}'})
+            if response.status_code != 200:
+                raise Exception(f"Failed to get drives. Status code: {response.status_code}")
+
+            drive_id = None
+            for drive in response.json().get('value', []):
+                if drive['name'] == library_name:
+                    drive_id = drive['id']
+                    break
+
+            if not drive_id:
+                raise Exception(f"Library '{library_name}' not found")
+
+            # Create or append to rename log file
+            log_filename = "FileRenameLog.txt"
+            log_content = f"""
+Rename Operation: {datetime.datetime.now()}
+Original Name: {original_name}
+New Name: {new_name}
+Reason: {reason}
+----------------------------------------
+"""
+            # Check if log file exists
+            search_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/root/search(q='{log_filename}')"
+            response = requests.get(search_url, headers={'Authorization': f'Bearer {self.access_token}'})
+
+            headers = {
+                'Authorization': f'Bearer {self.access_token}',
+                'Content-Type': 'text/plain'
+            }
+
+            if response.status_code == 200 and response.json().get('value'):
+                # File exists, append to it
+                file_id = response.json()['value'][0]['id']
+                update_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/content"
+
+                # Get existing content
+                get_content_response = requests.get(update_url, headers={'Authorization': f'Bearer {self.access_token}'})
+                existing_content = get_content_response.text if get_content_response.status_code == 200 else ""
+
+                # Append new content
+                full_content = existing_content + log_content
+                requests.put(update_url, headers=headers, data=full_content.encode('utf-8'))
+            else:
+                # Create new file
+                create_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/root:/FileRenameLog.txt:/content"
+                requests.put(create_url, headers=headers, data=log_content.encode('utf-8'))
+
+        except Exception as e:
+            logger.error(f"Failed to log rename operation: {str(e)}")
+
+    def scan_for_long_paths(self, library_name):
+        """Scan library for files with problematic path lengths"""
+        try:
+            if not self.access_token:
+                self.authenticate()
+
+            files = self.get_files(library_name)
+            problematic_files = []
+
+            for file in files:
+                full_path = self._get_full_path(library_name, file['Path'])
+                if self._is_path_too_long(full_path):
+                    problematic_files.append({
+                        'id': file['Id'],
+                        'name': file['Name'],
+                        'path': file['Path'],
+                        'full_path_length': len(full_path)
+                    })
+
+            return problematic_files
+
+        except Exception as e:
+            logger.error(f"Failed to scan for long paths: {str(e)}")
+            raise
+
     def bulk_rename_files(self, library_name, rename_operations):
-        """
-        Perform bulk rename operations on files
-        Args:
-            library_name: Name of the SharePoint library
-            rename_operations: List of dicts with {'old_name': str, 'new_name': str, 'file_id': str}
-        """
+        """Enhanced bulk rename with path length validation"""
         try:
             if not self.access_token:
                 self.authenticate()
@@ -343,6 +434,24 @@ class SharePointClient:
                     new_name = operation['new_name']
                     old_name = operation['old_name']
 
+                    # Get current file details
+                    file_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}"
+                    file_response = requests.get(file_url, headers=headers)
+                    if file_response.status_code != 200:
+                        raise Exception(f"Failed to get file details. Status code: {file_response.status_code}")
+
+                    file_data = file_response.json()
+                    parent_path = file_data.get('parentReference', {}).get('path', '')
+
+                    # Check if new path would be too long
+                    new_full_path = self._get_full_path(library_name, f"{parent_path}/{new_name}")
+                    if self._is_path_too_long(new_full_path):
+                        # Attempt to create a shorter name while preserving extension
+                        name, ext = os.path.splitext(new_name)
+                        truncated_name = name[:20] + "..." + ext  # Preserve extension
+                        new_name = truncated_name
+                        logger.warning(f"File path too long, truncating to: {truncated_name}")
+
                     # Rename the file
                     update_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}"
                     update_data = {'name': new_name}
@@ -359,6 +468,8 @@ class SharePointClient:
                         })
                     else:
                         logger.info(f"Successfully renamed {old_name} to {new_name}")
+                        # Log the rename operation
+                        self._create_rename_log(library_name, old_name, new_name)
                         results.append({
                             'old_name': old_name,
                             'new_name': new_name,

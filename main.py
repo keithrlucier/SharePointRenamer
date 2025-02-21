@@ -335,6 +335,20 @@ def show_library_selector():
 
         selected_library = st.selectbox("Select SharePoint Library", libraries)
         if selected_library:
+            # Add scan button in sidebar
+            if st.sidebar.button("🔍 Scan for Long Paths"):
+                with st.spinner("Scanning for problematic file paths..."):
+                    problematic_files = st.session_state.client.scan_for_long_paths(selected_library)
+                    if problematic_files:
+                        st.sidebar.warning(f"Found {len(problematic_files)} files with long paths")
+                        with st.sidebar.expander("View Problematic Files"):
+                            for file in problematic_files:
+                                st.write(f"📄 {file['name']}")
+                                st.write(f"Length: {file['full_path_length']} characters")
+                                st.write("---")
+                    else:
+                        st.sidebar.success("No problematic file paths found")
+
             show_file_manager(selected_library)
     except Exception as e:
         st.error(f"Error loading libraries: {str(e)}")
@@ -342,6 +356,7 @@ def show_library_selector():
         if "authentication" in str(e).lower():
             st.session_state.authenticated = False
             st.rerun()
+
 
 
 if __name__ == "__main__":
