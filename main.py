@@ -30,11 +30,17 @@ def show_navigation():
     .nav-title {
         display: flex;
         align-items: center;
-        gap: 0.5rem;
+        gap: 1rem;
     }
     .nav-version {
         font-size: 0.8rem;
         color: #666;
+    }
+    .logo-img {
+        height: 40px;
+        width: auto;
+        vertical-align: middle;
+        margin-right: 1rem;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -42,7 +48,15 @@ def show_navigation():
     col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
 
     with col1:
-        st.markdown(f"# SharePoint File Name Manager <span class='nav-version'>v{APP_VERSION}</span>", unsafe_allow_html=True)
+        st.markdown(
+            f"""
+            <div class="nav-title">
+                <img src="https://pro-source-demo.s3.us-east-1.amazonaws.com/ProSource+brandmark.png" class="logo-img" alt="ProSource Logo">
+                <span>SharePoint File Name Manager <span class="nav-version">v{APP_VERSION}</span></span>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
 
     with col2:
         if st.button("📚 Setup Guide", key="nav_setup"):
@@ -319,7 +333,7 @@ def show_file_manager(library_name):
                             # Keep failed files selected for retry
                             failed_ids = {r['file_id'] for r in failed}
                             st.session_state.selected_files = {
-                                file_id: file 
+                                file_id: file
                                 for file_id, file in st.session_state.selected_files.items()
                                 if file_id in failed_ids
                             }
