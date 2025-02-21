@@ -412,6 +412,7 @@ Reason: {reason}
             site_id = f"sites/{host_part}{site_path}"
             drives_url = f"https://graph.microsoft.com/v1.0/{site_id}/drives"
 
+            logger.info(f"Getting drive ID for library: {library_name}")
             response = requests.get(drives_url, headers=headers)
             if response.status_code != 200:
                 raise Exception(f"Failed to get drives. Status code: {response.status_code}")
@@ -425,63 +426,79 @@ Reason: {reason}
             if not drive_id:
                 raise Exception(f"Library '{library_name}' not found")
 
-            # Prepare batch request
-            batch_url = "https://graph.microsoft.com/v1.0/$batch"
-            batch_requests = []
-            request_map = {}  # Map request IDs to original operations
+            logger.info(f"Found drive ID: {drive_id}")
 
-            for idx, operation in enumerate(rename_operations):
-                request_id = str(idx + 1)
-                file_id = operation['file_id']
-                new_name = operation['new_name']
-
-                # Add request to batch
-                batch_requests.append({
-                    "id": request_id,
-                    "method": "PATCH",
-                    "url": f"/drives/{drive_id}/items/{file_id}",
-                    "body": {"name": new_name},
-                    "headers": {"Content-Type": "application/json"}
-                })
-                request_map[request_id] = operation
-
-            # Split into batches of 20 (Graph API limit)
+            # Process rename operations in batches
             batch_size = 20
             results = []
 
-            for i in range(0, len(batch_requests), batch_size):
-                batch_slice = batch_requests[i:i + batch_size]
-                batch_payload = {"requests": batch_slice}
+            # Process operations in chunks
+            for i in range(0, len(rename_operations), batch_size):
+                batch_chunk = rename_operations[i:i + batch_size]
+                logger.info(f"Processing batch {i//batch_size + 1} with {len(batch_chunk)} operations")
 
-                logger.info(f"Processing batch {i//batch_size + 1} with {len(batch_slice)} operations")
+                batch_requests = []
+                request_map = {}
 
-                response = requests.post(batch_url, headers=headers, json=batch_payload)
+                for idx, operation in enumerate(batch_chunk):
+                    request_id = str(idx + 1)
+                    file_id = operation['file_id']
+                    new_name = operation['new_name']
 
-                if response.status_code != 200:
-                    raise Exception(f"Batch request failed. Status: {response.status_code}")
+                    # Each request in the batch needs the full resource URL
+                    batch_requests.append({
+                        "id": request_id,
+                        "method": "PATCH",
+                        "url": f"/drives/{drive_id}/items/{file_id}",
+                        "body": {"name": new_name},
+                        "headers": {
+                            "Content-Type": "application/json"
+                        }
+                    })
+                    request_map[request_id] = operation
 
-                batch_results = response.json().get('responses', [])
+                batch_payload = {
+                    "requests": batch_requests
+                }
 
-                # Process batch results
+                logger.info(f"Sending batch request with {len(batch_requests)} operations")
+                batch_url = "https://graph.microsoft.com/v1.0/$batch"
+                batch_response = requests.post(batch_url, headers=headers, json=batch_payload)
+
+                if batch_response.status_code != 200:
+                    logger.error(f"Batch request failed. Status: {batch_response.status_code}")
+                    logger.error(f"Response: {batch_response.text}")
+                    raise Exception(f"Batch request failed. Status: {batch_response.status_code}")
+
+                batch_results = batch_response.json().get('responses', [])
+                logger.info(f"Received {len(batch_results)} responses from batch operation")
+
                 for result in batch_results:
                     request_id = result['id']
                     original_op = request_map[request_id]
-                    success = 200 <= result['status'] < 300
+                    status_code = result['status']
+                    success = 200 <= status_code < 300
 
                     if success:
                         logger.info(f"Successfully renamed {original_op['old_name']} to {original_op['new_name']}")
-                        self._create_rename_log(library_name, original_op['old_name'], original_op['new_name'])
+                        try:
+                            self._create_rename_log(library_name, original_op['old_name'], original_op['new_name'])
+                        except Exception as log_error:
+                            logger.warning(f"Failed to create rename log: {str(log_error)}")
                     else:
-                        logger.error(f"Failed to rename {original_op['old_name']}: {result.get('body', {}).get('error', {}).get('message', 'Unknown error')}")
+                        error_body = result.get('body', {})
+                        error_message = error_body.get('error', {}).get('message', 'Unknown error')
+                        logger.error(f"Failed to rename {original_op['old_name']}: {error_message}")
 
                     results.append({
                         'old_name': original_op['old_name'],
                         'new_name': original_op['new_name'],
                         'success': success,
                         'file_id': original_op['file_id'],
-                        'error': None if success else result.get('body', {}).get('error', {}).get('message', 'Unknown error')
+                        'error': None if success else error_message
                     })
 
+            logger.info(f"Completed processing {len(results)} rename operations")
             return results
 
         except Exception as e:
