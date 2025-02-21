@@ -47,6 +47,7 @@ class User(UserMixin, db.Model):
     def verify_mfa(self, code):
         """Verify MFA code with a larger window to account for time drift"""
         if not self.mfa_enabled or not self.mfa_secret or not code:
+            logger.warning(f"MFA verification failed: Invalid state for user {self.email}")
             return False
 
         try:
@@ -56,7 +57,7 @@ class User(UserMixin, db.Model):
                 return False
 
             totp = pyotp.TOTP(self.mfa_secret)
-            # Increase window size to ±2 intervals (±60 seconds)
+            # Increase window size to ±3 intervals (±90 seconds)
             # This gives more tolerance for time drift
             return totp.verify(code, valid_window=3)
         except Exception as e:
