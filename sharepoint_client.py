@@ -324,20 +324,33 @@ class SharePointClient:
     def _create_rename_log(self, library_name, original_name, new_name, reason="Path too long"):
         """Create a simple local log entry for file rename operations"""
         try:
+            # Create logs directory if it doesn't exist
+            log_dir = "logs"
+            os.makedirs(log_dir, exist_ok=True)
+
+            log_file_path = os.path.join(log_dir, "rename_operations.log")
+
             # Create a local log entry with timestamp
             timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             log_entry = f"""[{timestamp}] {library_name}: Renamed "{original_name}" to "{new_name}" ({reason})\n"""
 
-            # Write directly to local file
-            with open("rename_operations.log", "a", encoding='utf-8') as f:
-                f.write(log_entry)
-                f.flush()  # Ensure it's written immediately
+            # Ensure atomic write with proper file handle cleanup
+            try:
+                with open(log_file_path, "a", encoding='utf-8') as f:
+                    f.write(log_entry)
+                    f.flush()  # Force flush to disk
+                    os.fsync(f.fileno())  # Ensure it's written to disk
 
-            logger.info(f"Logged rename operation: {original_name} -> {new_name}")
-            return True
+                logger.info(f"Successfully logged rename operation to {log_file_path}")
+                logger.info(f"Log entry: {log_entry.strip()}")
+                return True
+
+            except IOError as io_err:
+                logger.error(f"IOError while writing to log file: {str(io_err)}")
+                return False
 
         except Exception as e:
-            logger.error(f"Failed to log rename operation: {str(e)}")
+            logger.error(f"Failed to create/write to log file: {str(e)}")
             return False
 
     def scan_for_long_paths(self, library_name):
@@ -428,6 +441,9 @@ class SharePointClient:
                             reason="Bulk rename operation"
                         )
 
+                        if not log_success:
+                            logger.error(f"Failed to log rename operation for {old_name}")
+
                         results.append({
                             'old_name': old_name,
                             'new_name': new_name,
@@ -440,25 +456,41 @@ class SharePointClient:
                         logger.info(f"Successfully renamed {old_name} to {new_name}")
                     else:
                         error_message = response.text
+                        # Log the failed rename attempt
+                        self._create_rename_log(
+                            library_name,
+                            old_name,
+                            new_name,
+                            reason=f"Failed: {error_message}"
+                        )
+
                         results.append({
                             'old_name': old_name,
                             'new_name': new_name,
                             'success': False,
                             'file_id': file_id,
                             'error': error_message,
-                            'logged': False
+                            'logged': True
                         })
                         logger.error(f"Failed to rename {old_name}: {error_message}")
 
                 except Exception as e:
-                    logger.error(f"Error processing rename for {old_name}: {str(e)}")
+                    logger.error(f"Error processing rename for {operation.get('old_name', 'unknown')}: {str(e)}")
+                    # Log the exception
+                    self._create_rename_log(
+                        library_name,
+                        operation.get('old_name', 'unknown'),
+                        operation.get('new_name', 'unknown'),
+                        reason=f"Exception: {str(e)}"
+                    )
+
                     results.append({
-                        'old_name': old_name,
-                        'new_name': new_name,
+                        'old_name': operation.get('old_name', 'unknown'),
+                        'new_name': operation.get('new_name', 'unknown'),
                         'success': False,
-                        'file_id': file_id,
+                        'file_id': operation.get('file_id', 'unknown'),
                         'error': str(e),
-                        'logged': False
+                        'logged': True
                     })
 
             return results
