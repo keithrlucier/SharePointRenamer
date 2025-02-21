@@ -33,6 +33,7 @@ class User(UserMixin, db.Model):
             return False
 
     def get_mfa_uri(self):
+        """Generate MFA URI for QR code"""
         if not self.mfa_secret:
             self.mfa_secret = pyotp.random_base32()
         return pyotp.totp.TOTP(self.mfa_secret).provisioning_uri(
@@ -41,10 +42,12 @@ class User(UserMixin, db.Model):
         )
 
     def verify_mfa(self, code):
+        """Verify MFA code with a larger window to account for time drift"""
         if not self.mfa_enabled or not self.mfa_secret:
             return False
         totp = pyotp.TOTP(self.mfa_secret)
-        return totp.verify(code)
+        # Check current and adjacent intervals to account for time skew
+        return totp.verify(code, valid_window=1)  # This allows for 30 seconds before and after
 
 class Tenant(db.Model):
     id = db.Column(db.Integer, primary_key=True)
