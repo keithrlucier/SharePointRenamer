@@ -80,35 +80,33 @@ def show_navigation():
 
     with col2:
         # Home button always visible
-        if st.button("🏠 Libraries", key="nav_home"):
-            if st.session_state.get('authenticated', False):
-                st.session_state['show_setup'] = False
-                st.session_state['show_credentials'] = False
-                st.rerun()
-            else:
+        if st.button("🏠 Libraries", key="nav_home", use_container_width=True):
+            st.session_state['current_page'] = 'home'
+            st.session_state['show_setup'] = False
+            st.session_state['show_credentials'] = False
+            if not st.session_state.get('authenticated', False):
                 st.warning("Please connect to SharePoint first to access libraries.")
-                st.session_state['show_setup'] = False
-                st.session_state['show_credentials'] = False
-                st.rerun()
 
     with col3:
-        if st.button("📚 Setup Guide", key="nav_setup"):
+        if st.button("📚 Setup Guide", key="nav_setup", use_container_width=True):
+            st.session_state['current_page'] = 'setup'
             st.session_state['show_setup'] = True
             st.session_state['show_credentials'] = False
-            st.rerun()
 
     with col4:
-        if st.button("⚙️ Credentials", key="nav_credentials"):
+        if st.button("⚙️ Credentials", key="nav_credentials", use_container_width=True):
+            st.session_state['current_page'] = 'credentials'
             st.session_state['show_credentials'] = True
             st.session_state['show_setup'] = False
-            st.rerun()
 
     with col5:
-        if st.session_state.get('authenticated', False):
-            if st.button("🔄 Rename Files", key="nav_rename"):
+        if st.button("🔄 Rename Files", key="nav_rename", use_container_width=True):
+            if st.session_state.get('authenticated', False):
+                st.session_state['current_page'] = 'rename'
                 st.session_state['show_setup'] = False
                 st.session_state['show_credentials'] = False
-                st.rerun()
+            else:
+                st.warning("Please connect to SharePoint first to access file renaming.")
 
 def initialize_session_state():
     """Initialize session state variables"""
@@ -128,6 +126,8 @@ def initialize_session_state():
         st.session_state['show_credentials'] = False
     if 'problematic_files' not in st.session_state:
         st.session_state['problematic_files'] = []
+    if 'current_page' not in st.session_state:
+        st.session_state['current_page'] = 'home'
 
 def apply_rename_pattern(filename, pattern):
     """Apply rename pattern to filename"""
@@ -543,12 +543,18 @@ def show_rename_form(library_name, file):
             st.error("Invalid filename. Please try again.")
 
 def main():
-    st.title("SharePoint File Name Manager")
-
-    # Initialize session state first
+    """Main application entry point"""
     initialize_session_state()
     show_navigation()
 
+    # Handle page routing based on current_page
+    if st.session_state.get('show_setup', False):
+        show_setup_guide()
+        return
+
+    if st.session_state.get('show_credentials', False):
+        show_credentials_manager()
+        return
 
     if not st.session_state.authenticated:
         st.warning("⚠️ Please connect to SharePoint to access libraries and file management features.")
@@ -577,13 +583,14 @@ def authenticate():
         if st.button("⚙️ Configure Azure AD Credentials", key="auth_manage_creds"):
             st.session_state['show_credentials'] = True
             st.session_state['show_setup'] = False
-            st.rerun()
+            st.session_state['current_page'] = 'credentials'
 
     with col2:
         if st.button("📚 View Setup Guide", key="auth_setup_guide"):
             st.session_state['show_setup'] = True
             st.session_state['show_credentials'] = False
-            st.rerun()
+            st.session_state['current_page'] = 'setup'
+
 
     if st.session_state.get('show_credentials', False):
         show_credentials_manager()
@@ -593,7 +600,7 @@ def authenticate():
         show_setup_guide()
         if st.button("← Back to Login", key="setup_back_to_login"):
             st.session_state['show_setup'] = False
-            st.rerun()
+            st.session_state['current_page'] = 'home'
         return
 
     with st.form("authentication_form"):
