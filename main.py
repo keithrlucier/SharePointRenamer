@@ -20,6 +20,28 @@ logger = logging.getLogger(__name__)
 # App version
 APP_VERSION = "1.0.0"
 
+# Initialize database with admin user if not exists
+def initialize_database():
+    """Initialize database with admin user if not exists"""
+    with app.app_context():
+        try:
+            # Check if admin user exists
+            admin = User.query.filter_by(email='admin@example.com').first()
+            if not admin:
+                admin = User(
+                    email='admin@example.com',
+                    is_admin=True,
+                    is_active=True
+                )
+                admin.set_password('admin123')
+                db.session.add(admin)
+                db.session.commit()
+                logger.info("Created initial admin user")
+        except Exception as e:
+            logger.error(f"Error initializing database: {str(e)}")
+
+initialize_database()
+
 # Initialize Flask app context
 app.app_context().push()
 
