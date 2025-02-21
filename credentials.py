@@ -38,29 +38,33 @@ def show_credentials_manager():
             help="The secret value from Azure AD App Registration"
         )
 
+        site_url = st.text_input(
+            "SharePoint Site URL",
+            value=os.environ.get("SHAREPOINT_SITE_URL", ""),
+            help="The URL of your SharePoint site (e.g., https://yourtenant.sharepoint.com/sites/yoursite)"
+        )
+
         submit = st.form_submit_button("Save Credentials", use_container_width=True)
 
         if submit:
-            if all([client_id, tenant_id, client_secret]):
+            if all([client_id, tenant_id, client_secret, site_url]):
                 try:
                     # Store credentials securely
                     os.environ["AZURE_CLIENT_ID"] = client_id
                     os.environ["AZURE_TENANT_ID"] = tenant_id
                     os.environ["AZURE_CLIENT_SECRET"] = client_secret
+                    os.environ["SHAREPOINT_SITE_URL"] = site_url
 
-                    # Try to initialize SharePoint client to verify credentials
+                    # Try to initialize SharePoint client and authenticate
                     try:
-                        client = SharePointClient(
-                            client_id=client_id,
-                            client_secret=client_secret,
-                            tenant_id=tenant_id
-                        )
+                        client = SharePointClient(site_url=site_url)
+                        client.authenticate()  # This will use the environment variables we just set
                         st.session_state['client'] = client
                         st.session_state['authenticated'] = True
-                        logger.info("SharePoint client initialized successfully")
+                        logger.info("SharePoint client initialized and authenticated successfully")
                     except Exception as e:
                         logger.error(f"Error initializing SharePoint client: {str(e)}")
-                        st.error("Failed to connect to SharePoint. Please verify your credentials.")
+                        st.error("Failed to connect to SharePoint. Please verify your credentials and site URL.")
                         return
 
                     st.success("Credentials saved and connection verified!")
