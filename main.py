@@ -203,6 +203,101 @@ def show_file_manager(library_name):
         # Bulk rename controls in sidebar
         st.sidebar.write("### Bulk Rename")
 
+        # Documentation for rename patterns
+        with st.sidebar.expander("📖 Pattern Type Documentation", expanded=False):
+            st.markdown("""
+            ### Rename Pattern Types
+
+            #### 1. Extract Last Part
+            Extracts the meaningful last part of a long filename, useful for cleaning up verbose legal document names.
+
+            **Logic:**
+            - Splits filename by common legal document delimiters
+            - Takes the last meaningful part
+            - Truncates to 60 characters if still too long
+            - Preserves file extension
+
+            **Examples:**
+            - Before: `IN THE MATTER OF CASE 123 - MOTION TO DISMISS - EXHIBIT A.pdf`
+            - After: `EXHIBIT A.pdf`
+
+            - Before: `NOTICE OF FILING - DEFENDANT RESPONSE - CONFIDENTIAL.docx`
+            - After: `CONFIDENTIAL.docx`
+
+            #### 2. No Pattern (Keep Original)
+            Maintains the original filename while ensuring it meets SharePoint's requirements.
+
+            **Logic:**
+            - Validates filename length (max 128 chars)
+            - Sanitizes invalid characters
+            - Preserves extension
+
+            **Example:**
+            - Before: `Original File Name.pdf`
+            - After: `Original File Name.pdf`
+
+            #### 3. Custom Pattern
+            Allows custom naming patterns using placeholders.
+
+            **Placeholders:**
+            - {name} = original filename without extension
+            - {ext} = original extension (including dot)
+
+            **Examples:**
+            - Pattern: `CASE123_{name}{ext}`
+              - Before: `motion.pdf`
+              - After: `CASE123_motion.pdf`
+
+            - Pattern: `{name}_v1{ext}`
+              - Before: `document.docx`
+              - After: `document_v1.docx`
+
+            #### 4. Add Prefix
+            Prepends a specified prefix to all filenames.
+
+            **Logic:**
+            - Adds prefix before original filename
+            - Preserves original name and extension
+            - Validates total length
+
+            **Examples:**
+            - Prefix: `DOC_`
+              - Before: `contract.pdf`
+              - After: `DOC_contract.pdf`
+
+            #### 5. Add Case Number
+            Prepends a case number identifier to filenames.
+
+            **Logic:**
+            - Adds case number prefix
+            - Maintains consistent format
+            - Preserves original name
+
+            **Examples:**
+            - Case: `CASE123_`
+              - Before: `evidence.pdf`
+              - After: `CASE123_evidence.pdf`
+
+            #### 6. Add Date Prefix
+            Adds current date as a prefix in YYYYMMDD format.
+
+            **Logic:**
+            - Adds today's date as prefix
+            - Format: YYYYMMDD_
+            - Preserves original name
+
+            **Examples:**
+            - Before: `report.pdf`
+            - After: `20250221_report.pdf`
+
+            ### Important Notes:
+            - All patterns enforce SharePoint's 128-character filename limit
+            - Invalid characters are automatically removed
+            - Files over length limits are intelligently truncated
+            - Extensions are always preserved
+            - Spaces and special characters are handled safely
+            """)
+
         # Add pattern selection
         pattern_type = st.sidebar.radio(
             "Choose Pattern Type",
