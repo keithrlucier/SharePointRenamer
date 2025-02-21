@@ -26,7 +26,9 @@ def show_setup_guide():
     1. In your newly registered app, go to "API permissions"
     2. Click "Add a permission"
     3. Select "Microsoft Graph"
-    4. Choose "Application permissions"
+    4. Choose "Application permissions" (NOT Delegated permissions)
+       - Application permissions are required because this app runs without user context
+       - Delegated permissions will not work for this application's background operations
     5. Add these permissions:
         - Sites.Read.All (Required for basic file listing and reading)
         - Sites.ReadWrite.All (Required for file operations and test library creation)
