@@ -24,6 +24,14 @@ def show_mfa_setup():
             st.error("User not found")
             return
 
+        # Add navigation buttons at the top
+        col1, col2, col3 = st.columns([1, 1, 1])
+        with col1:
+            if user.is_admin:
+                if st.button("🔧 Admin Controls"):
+                    st.session_state['page'] = 'admin'
+                    st.rerun()
+
         if not user.mfa_enabled:
             st.info("""
             Two-factor authentication adds an extra layer of security to your account.
