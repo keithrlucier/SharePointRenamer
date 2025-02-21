@@ -379,6 +379,7 @@ Reason: {reason}
             # Using a retry mechanism for file operations
             max_retries = 3
             retry_count = 0
+            backoff_time = 1  # Starting backoff time in seconds
 
             while retry_count < max_retries:
                 try:
@@ -392,14 +393,9 @@ Reason: {reason}
                         get_response = requests.get(get_url, headers=headers)
 
                         if get_response.status_code == 200:
-                            # Append new entry to existing content
                             existing_content = get_response.text
-                            # Ensure we're not duplicating entries
-                            if f"Original Name: {original_name}\nNew Name: {new_name}" not in existing_content:
-                                full_content = existing_content + log_entry
-                            else:
-                                logger.info(f"Entry for {original_name} -> {new_name} already exists in log")
-                                return True
+                            # Always append new entry, remove duplicate check
+                            full_content = existing_content + log_entry
 
                             # Update the file
                             update_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/content"
@@ -436,9 +432,11 @@ Reason: {reason}
                 except Exception as e:
                     retry_count += 1
                     if retry_count >= max_retries:
-                        raise
+                        raise Exception(f"Failed to create/update log after {max_retries} retries: {str(e)}")
+
                     logger.warning(f"Retry {retry_count} of {max_retries} for log file operation: {str(e)}")
-                    time.sleep(1)  # Wait before retry
+                    time.sleep(backoff_time)  # Wait before retry with exponential backoff
+                    backoff_time *= 2  # Double the backoff time for next retry
 
             raise Exception("Max retries exceeded for log file operation")
 
