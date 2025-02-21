@@ -538,7 +538,24 @@ Reason: {reason}
                 logger.info("Creating new Test Library...")
                 response = requests.post(lists_url, headers=headers, json=library_data)
 
-                if response.status_code not in [200, 201]:
+                if response.status_code == 403:
+                    error_msg = """
+                    Access Denied: Your Azure AD application needs additional permissions.
+
+                    Please ensure your Azure AD application has these permissions:
+                    1. Sites.ReadWrite.All
+                    2. Sites.Manage.All
+
+                    To add these permissions:
+                    1. Go to Azure Portal -> App Registrations
+                    2. Select your application
+                    3. Click on 'API Permissions'
+                    4. Add the permissions above
+                    5. Click 'Grant admin consent'
+                    """
+                    logger.error(error_msg)
+                    raise Exception(error_msg)
+                elif response.status_code not in [200, 201]:
                     logger.error(f"Failed to create library. Response: {response.text}")
                     raise Exception(f"Failed to create Test Library. Status code: {response.status_code}")
 
