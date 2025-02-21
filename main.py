@@ -20,7 +20,7 @@ def initialize_session_state():
     if 'selected_files' not in st.session_state:
         st.session_state['selected_files'] = {}
     if 'rename_pattern' not in st.session_state:
-        st.session_state['rename_pattern'] = ""
+        st.session_state['rename_pattern'] = "{name}{ext}"
     if 'preview_renames' not in st.session_state:
         st.session_state['preview_renames'] = []
     if 'show_setup' not in st.session_state:
@@ -30,29 +30,28 @@ def initialize_session_state():
 
 def apply_rename_pattern(filename, pattern):
     """Apply rename pattern to filename"""
-    # Handle "Extract Last Part" pattern type
-    if pattern == "__extract_last_part__":
-        # Split by various delimiters and get the last part
-        delimiters = [' - ', '-', '_']
-        name = filename
-        for delimiter in delimiters:
-            if delimiter in name:
-                name = name.split(delimiter)[-1].strip()
-        return name
+    try:
+        # Handle "Extract Last Part" pattern type
+        if pattern == "__extract_last_part__":
+            # Split by various delimiters and get the last part
+            delimiters = [' - ', '-', '_']
+            name = filename
+            for delimiter in delimiters:
+                if delimiter in name:
+                    name = name.split(delimiter)[-1].strip()
+            return sanitize_filename(name)
 
-    # Extract the file extension
-    name, ext = os.path.splitext(filename)
+        # Extract the file extension
+        name, ext = os.path.splitext(filename)
 
-    # Replace placeholders in pattern
-    new_name = pattern
+        # Replace placeholders in pattern
+        new_name = pattern.replace('{name}', name).replace('{ext}', ext)
 
-    # {name} - original filename without extension
-    new_name = new_name.replace('{name}', name)
-
-    # {ext} - original extension including dot
-    new_name = new_name.replace('{ext}', ext)
-
-    return new_name
+        # Sanitize the new name
+        return sanitize_filename(new_name)
+    except Exception as e:
+        logger.error(f"Error in apply_rename_pattern: {str(e)}")
+        return filename
 
 def show_file_manager(library_name):
     """Display file management interface"""
@@ -127,13 +126,13 @@ def show_file_manager(library_name):
 
         # Initialize rename pattern based on selection
         if pattern_type == "Extract Last Part":
-            rename_pattern = "__extract_last_part__"
+            st.session_state.rename_pattern = "__extract_last_part__"
         elif pattern_type == "No Pattern (Keep Original)":
-            rename_pattern = "{name}{ext}"
+            st.session_state.rename_pattern = "{name}{ext}"
         elif pattern_type == "Custom Pattern":
-            rename_pattern = st.sidebar.text_input(
+            st.session_state.rename_pattern = st.sidebar.text_input(
                 "Rename Pattern",
-                value="{name}{ext}",
+                value=st.session_state.rename_pattern,
                 help="""
                 Use these placeholders:
                 - {name} = original filename without extension
@@ -147,17 +146,18 @@ def show_file_manager(library_name):
             )
         elif pattern_type == "Add Prefix":
             prefix = st.sidebar.text_input("Enter Prefix", value="DOC_")
-            rename_pattern = f"{prefix}{{name}}{{ext}}"
+            st.session_state.rename_pattern = f"{prefix}{{name}}{{ext}}"
         elif pattern_type == "Add Case Number":
             case_number = st.sidebar.text_input("Enter Case Number", value="CASE123_")
-            rename_pattern = f"{case_number}{{name}}{{ext}}"
+            st.session_state.rename_pattern = f"{case_number}{{name}}{{ext}}"
         elif pattern_type == "Add Date Prefix":
             import datetime
             today = datetime.datetime.now().strftime("%Y%m%d_")
-            rename_pattern = f"{today}{{name}}{{ext}}"
+            st.session_state.rename_pattern = f"{today}{{name}}{{ext}}"
 
+        # Show pattern preview
         if pattern_type not in ["Extract Last Part"]:
-            st.sidebar.info(f"Pattern Preview: {rename_pattern}")
+            st.sidebar.info(f"Pattern Preview: {st.session_state.rename_pattern}")
 
         # Add select all button
         if st.sidebar.button("Select All Files"):
@@ -177,7 +177,7 @@ def show_file_manager(library_name):
 
         # Bulk rename button and logic
         if st.sidebar.button("Rename Selected Files"):
-            logger.info(f"Attempting bulk rename with pattern: {rename_pattern}")
+            logger.info(f"Attempting bulk rename with pattern: {st.session_state.rename_pattern}")
             logger.info(f"Selected files count: {len(st.session_state.selected_files)}")
 
             if not st.session_state.selected_files:
@@ -190,7 +190,7 @@ def show_file_manager(library_name):
             for file_id, file in st.session_state.selected_files.items():
                 try:
                     current_name = file['Name']
-                    new_name = apply_rename_pattern(current_name, rename_pattern)
+                    new_name = apply_rename_pattern(current_name, st.session_state.rename_pattern)
                     logger.info(f"Processing file: {current_name} -> {new_name}")
 
                     if validate_filename(new_name):
