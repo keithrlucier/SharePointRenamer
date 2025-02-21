@@ -442,77 +442,57 @@ Reason: {reason}
 
             logger.info(f"Found drive ID: {drive_id}")
 
-            # Process rename operations in batches
-            batch_size = 20
+            # Process rename operations individually for better error handling
             results = []
 
-            # Process operations in chunks
-            for i in range(0, len(rename_operations), batch_size):
-                batch_chunk = rename_operations[i:i + batch_size]
-                logger.info(f"Processing batch {i//batch_size + 1} with {len(batch_chunk)} operations")
-
-                batch_requests = []
-                request_map = {}
-
-                for idx, operation in enumerate(batch_chunk):
-                    request_id = str(idx + 1)
+            for operation in rename_operations:
+                try:
                     file_id = operation['file_id']
                     new_name = operation['new_name']
+                    old_name = operation['old_name']
 
-                    # Each request in the batch needs the full resource URL
-                    batch_requests.append({
-                        "id": request_id,
-                        "method": "PATCH",
-                        "url": f"/drives/{drive_id}/items/{file_id}",
-                        "body": {"name": new_name},
-                        "headers": {
-                            "Content-Type": "application/json"
-                        }
-                    })
-                    request_map[request_id] = operation
+                    logger.info(f"Attempting to rename: {old_name} -> {new_name}")
 
-                batch_payload = {
-                    "requests": batch_requests
-                }
+                    # Update file metadata
+                    update_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}"
+                    update_data = {'name': new_name}
 
-                logger.info(f"Sending batch request with {len(batch_requests)} operations")
-                batch_url = "https://graph.microsoft.com/v1.0/$batch"
-                batch_response = requests.post(batch_url, headers=headers, json=batch_payload)
+                    response = requests.patch(update_url, headers=headers, json=update_data)
 
-                if batch_response.status_code != 200:
-                    logger.error(f"Batch request failed. Status: {batch_response.status_code}")
-                    logger.error(f"Response: {batch_response.text}")
-                    raise Exception(f"Batch request failed. Status: {batch_response.status_code}")
-
-                batch_results = batch_response.json().get('responses', [])
-                logger.info(f"Received {len(batch_results)} responses from batch operation")
-
-                for result in batch_results:
-                    request_id = result['id']
-                    original_op = request_map[request_id]
-                    status_code = result['status']
-                    success = 200 <= status_code < 300
-
-                    if success:
-                        logger.info(f"Successfully renamed {original_op['old_name']} to {original_op['new_name']}")
+                    if response.status_code in [200, 201]:
+                        logger.info(f"Successfully renamed {old_name} to {new_name}")
+                        results.append({
+                            'old_name': old_name,
+                            'new_name': new_name,
+                            'success': True,
+                            'file_id': file_id,
+                            'error': None
+                        })
+                        # Log the rename operation
                         try:
-                            self._create_rename_log(library_name, original_op['old_name'], original_op['new_name'])
+                            self._create_rename_log(library_name, old_name, new_name)
                         except Exception as log_error:
                             logger.warning(f"Failed to create rename log: {str(log_error)}")
                     else:
-                        error_body = result.get('body', {})
-                        error_message = error_body.get('error', {}).get('message', 'Unknown error')
-                        logger.error(f"Failed to rename {original_op['old_name']}: {error_message}")
-
+                        error_message = response.text
+                        logger.error(f"Failed to rename {old_name}: {error_message}")
+                        results.append({
+                            'old_name': old_name,
+                            'new_name': new_name,
+                            'success': False,
+                            'file_id': file_id,
+                            'error': error_message
+                        })
+                except Exception as e:
+                    logger.error(f"Error processing rename for {operation.get('old_name', 'unknown')}: {str(e)}")
                     results.append({
-                        'old_name': original_op['old_name'],
-                        'new_name': original_op['new_name'],
-                        'success': success,
-                        'file_id': original_op['file_id'],
-                        'error': None if success else error_message
+                        'old_name': operation.get('old_name', 'unknown'),
+                        'new_name': operation.get('new_name', 'unknown'),
+                        'success': False,
+                        'file_id': operation.get('file_id', 'unknown'),
+                        'error': str(e)
                     })
 
-            logger.info(f"Completed processing {len(results)} rename operations")
             return results
 
         except Exception as e:
