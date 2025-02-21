@@ -42,10 +42,24 @@ def show_navigation():
         vertical-align: middle;
         margin-right: 1rem;
     }
+    .connection-status {
+        font-size: 0.9rem;
+        padding: 4px 8px;
+        border-radius: 4px;
+        margin-left: 10px;
+    }
+    .status-connected {
+        background-color: #D1FAE5;
+        color: #065F46;
+    }
+    .status-disconnected {
+        background-color: #FEE2E2;
+        color: #991B1B;
+    }
     </style>
     """, unsafe_allow_html=True)
 
-    col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
+    col1, col2, col3, col4, col5 = st.columns([2, 1, 1, 1, 1])
 
     with col1:
         st.markdown(
@@ -58,19 +72,31 @@ def show_navigation():
             unsafe_allow_html=True
         )
 
+    # Show connection status
+    connection_status = "🟢 Connected" if st.session_state.get('authenticated', False) else "🔴 Not Connected"
+    status_class = "status-connected" if st.session_state.get('authenticated', False) else "status-disconnected"
+    st.markdown(f'<span class="connection-status {status_class}">{connection_status}</span>', unsafe_allow_html=True)
+
     with col2:
+        if st.session_state.get('authenticated', False):
+            if st.button("🏠 Home", key="nav_home"):
+                st.session_state['show_setup'] = False
+                st.session_state['show_credentials'] = False
+                st.rerun()
+
+    with col3:
         if st.button("📚 Setup Guide", key="nav_setup"):
             st.session_state['show_setup'] = True
             st.session_state['show_credentials'] = False
             st.rerun()
 
-    with col3:
+    with col4:
         if st.button("⚙️ Credentials", key="nav_credentials"):
             st.session_state['show_credentials'] = True
             st.session_state['show_setup'] = False
             st.rerun()
 
-    with col4:
+    with col5:
         if st.session_state.get('authenticated', False):
             if st.button("🔄 Rename Files", key="nav_rename"):
                 st.session_state['show_setup'] = False
@@ -518,6 +544,7 @@ def main():
 
 
     if not st.session_state.authenticated:
+        st.warning("⚠️ Please connect to SharePoint to access libraries and file management features.")
         authenticate()
     else:
         if st.sidebar.button("Logout"):
@@ -529,12 +556,18 @@ def main():
 
 def authenticate():
     """Handle SharePoint authentication"""
-    st.write("### SharePoint Authentication")
+    st.write("### Connect to SharePoint")
+    st.info("""
+    To get started with the SharePoint File Name Manager:
+    1. Enter your SharePoint site URL below
+    2. Make sure you have configured your Azure AD credentials
+    3. Click Connect to access your SharePoint libraries
+    """)
 
     # Add navigation buttons with unique keys
     col1, col2 = st.columns(2)
     with col1:
-        if st.button("⚙️ Manage Azure AD Credentials", key="auth_manage_creds"):
+        if st.button("⚙️ Configure Azure AD Credentials", key="auth_manage_creds"):
             st.session_state['show_credentials'] = True
             st.session_state['show_setup'] = False
             st.rerun()
@@ -562,7 +595,7 @@ def authenticate():
 
         st.info("Make sure you have configured your Azure AD credentials before connecting.")
 
-        submit = st.form_submit_button("Connect")
+        submit = st.form_submit_button("🔗 Connect to SharePoint", use_container_width=True)
 
         if submit and site_url:
             try:
