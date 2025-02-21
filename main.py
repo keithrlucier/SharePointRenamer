@@ -889,17 +889,36 @@ def main():
         current_page = st.session_state.get('current_page', 'home')
 
         if current_page == 'home':
-            if st.session_state.get('authenticated', False):
-                # Show SharePoint libraries and file management
-                libraries = st.session_state.client.get_libraries()
-                if libraries:
-                    selected_library = st.selectbox("Select Library", libraries)
-                    if selected_library:
-                        show_file_manager(selected_library)
-                else:
-                    st.info("No libraries found. Please check your SharePoint permissions.")
+            if not st.session_state.get('client'):
+                st.warning("Please set up your SharePoint credentials first.")
+                if st.button("Configure SharePoint Credentials"):
+                    st.session_state['show_credentials'] = True
+                    st.session_state['show_setup'] = False
+                    st.rerun()
+            elif st.session_state.get('authenticated', False):
+                try:
+                    # Show SharePoint libraries and file management
+                    libraries = st.session_state.client.get_libraries()
+                    if libraries:
+                        selected_library = st.selectbox("Select Library", libraries)
+                        if selected_library:
+                            show_file_manager(selected_library)
+                    else:
+                        st.info("No libraries found. Please check your SharePoint permissions.")
+                except Exception as e:
+                    st.error("Error connecting to SharePoint. Please check your credentials.")
+                    logger.error(f"SharePoint connection error: {str(e)}")
+                    st.session_state['authenticated'] = False
+                    if st.button("Reconfigure SharePoint Connection"):
+                        st.session_state['show_credentials'] = True
+                        st.session_state['show_setup'] = False
+                        st.rerun()
             else:
                 st.warning("Please connect to SharePoint first.")
+                if st.button("Configure SharePoint Connection"):
+                    st.session_state['show_credentials'] = True
+                    st.session_state['show_setup'] = False
+                    st.rerun()
 
         elif current_page == 'mfa_setup':
             show_mfa_setup()
@@ -912,17 +931,13 @@ def main():
 
         elif current_page == 'user_management':
             if st.session_state.get('is_admin', False):
-                with st.container():
-                    st.write("### User Management")
-                    # Add your user management UI here
+                show_admin_panel()  # This will show the users tab by default
             else:
                 st.error("Access denied. Admin privileges required.")
 
         elif current_page == 'tenant_settings':
             if st.session_state.get('is_admin', False):
-                with st.container():
-                    st.write("### Tenant Settings")
-                    # Add your tenant settings UI here
+                show_admin_panel()  # This will show the tenants tab by default
             else:
                 st.error("Access denied. Admin privileges required.")
 
