@@ -369,15 +369,17 @@ def authenticate():
     """Handle SharePoint authentication"""
     st.write("### SharePoint Authentication")
 
-    # Add credentials management button
-    if st.button("⚙️ Manage Azure AD Credentials"):
-        st.session_state['show_credentials'] = True
-        st.rerun()
+    # Add navigation buttons with unique keys
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("⚙️ Manage Azure AD Credentials", key="auth_manage_creds"):
+            st.session_state['show_credentials'] = True
+            st.rerun()
 
-    # Add setup guide button
-    if st.button("📚 View Setup Guide"):
-        st.session_state['show_setup'] = True
-        st.rerun()
+    with col2:
+        if st.button("📚 View Setup Guide", key="auth_setup_guide"):
+            st.session_state['show_setup'] = True
+            st.rerun()
 
     if st.session_state.get('show_credentials', False):
         show_credentials_manager()
@@ -385,7 +387,7 @@ def authenticate():
 
     if st.session_state.get('show_setup', False):
         show_setup_guide()
-        if st.button("← Back to Login"):
+        if st.button("← Back to Login", key="setup_back_to_login"):
             st.session_state['show_setup'] = False
             st.rerun()
         return
