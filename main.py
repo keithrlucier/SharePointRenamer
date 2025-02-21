@@ -632,7 +632,6 @@ def show_login():
                     st.error("Invalid email or password")
 
 
-
 def show_admin_panel():
     """Display admin panel"""
     st.write("### Admin Panel")
@@ -880,41 +879,58 @@ def show_library_selector():
 
 
 def main():
-    """Main application logic"""
     initialize_session_state()
     show_navigation()
 
-    if 'user' not in st.session_state:
+    # Handle different pages based on current_page state
+    if not st.session_state.get('user'):
         show_login()
-        return
-
-    # Add logout button in sidebar
-    if st.sidebar.button("Logout"):
-        del st.session_state['user']
-        if 'is_admin' in st.session_state:
-            del st.session_state['is_admin']
-        st.rerun()
-
-    # Show admin panel for admin users
-    if st.session_state.get('is_admin', False):
-        if st.session_state.get('current_page') == 'mfa_setup':
-            show_mfa_setup()
-        else:
-            show_admin_panel()
-        return
-
-    # Show appropriate page based on navigation state
-    if st.session_state.get('current_page') == 'mfa_setup':
-        show_mfa_setup()
-    elif st.session_state.get('show_setup', False):
-        show_setup_guide()
-    elif st.session_state.get('show_credentials', False):
-        show_credentials_manager()
     else:
-        if st.session_state.get('authenticated', False):
-            show_library_selector()
-        else:
-            st.warning("Please connect to SharePoint using your credentials first.")
+        current_page = st.session_state.get('current_page', 'home')
+
+        if current_page == 'home':
+            if st.session_state.get('authenticated', False):
+                # Show SharePoint libraries and file management
+                libraries = st.session_state.client.get_libraries()
+                if libraries:
+                    selected_library = st.selectbox("Select Library", libraries)
+                    if selected_library:
+                        show_file_manager(selected_library)
+                else:
+                    st.info("No libraries found. Please check your SharePoint permissions.")
+            else:
+                st.warning("Please connect to SharePoint first.")
+
+        elif current_page == 'mfa_setup':
+            show_mfa_setup()
+
+        elif current_page == 'admin':
+            if st.session_state.get('is_admin', False):
+                show_admin_panel()
+            else:
+                st.error("Access denied. Admin privileges required.")
+
+        elif current_page == 'user_management':
+            if st.session_state.get('is_admin', False):
+                with st.container():
+                    st.write("### User Management")
+                    # Add your user management UI here
+            else:
+                st.error("Access denied. Admin privileges required.")
+
+        elif current_page == 'tenant_settings':
+            if st.session_state.get('is_admin', False):
+                with st.container():
+                    st.write("### Tenant Settings")
+                    # Add your tenant settings UI here
+            else:
+                st.error("Access denied. Admin privileges required.")
+
+        elif st.session_state.get('show_setup', False):
+            show_setup_guide()
+
+        elif st.session_state.get('show_credentials', False):
+            show_credentials_manager()
 
 if __name__ == "__main__":
     main()
