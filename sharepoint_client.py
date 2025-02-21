@@ -295,6 +295,9 @@ class SharePointClient:
 
             logger.info(f"File renamed successfully from {old_name} to {new_name}")
 
+            # Log the rename operation AFTER successful rename
+            self._create_rename_log(library_name, old_name, new_name)
+
         except Exception as e:
             logger.error(f"Failed to rename file {old_name}: {str(e)}")
             raise
@@ -323,6 +326,8 @@ class SharePointClient:
             if not self.access_token:
                 self.authenticate()
 
+            logger.info(f"Starting log creation for rename: {original_name} -> {new_name}")
+
             # Get drive ID for the library
             host_part = f"{self.tenant}.sharepoint.com"
             site_path = self.site_path if self.site_path else ''
@@ -334,9 +339,10 @@ class SharePointClient:
                 'Accept': 'application/json'
             }
 
+            logger.info("Getting drive ID for log creation")
             response = requests.get(drives_url, headers=headers)
             if response.status_code != 200:
-                raise Exception(f"Failed to get drives. Status code: {response.status_code}")
+                raise Exception(f"Failed to get drives for log creation. Status code: {response.status_code}")
 
             drive_id = None
             for drive in response.json().get('value', []):
@@ -345,12 +351,15 @@ class SharePointClient:
                     break
 
             if not drive_id:
-                raise Exception(f"Library '{library_name}' not found")
+                raise Exception(f"Library '{library_name}' not found for log creation")
+
+            logger.info(f"Found drive ID for log creation: {drive_id}")
 
             # Create or append to rename log file
             log_filename = "FileRenameLog.txt"
+            timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             log_content = f"""
-Rename Operation: {datetime.datetime.now()}
+Rename Operation: {timestamp}
 Original Name: {original_name}
 New Name: {new_name}
 Reason: {reason}
@@ -358,6 +367,7 @@ Reason: {reason}
 """
             # Check if log file exists
             search_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/root/search(q='{log_filename}')"
+            logger.info("Searching for existing log file")
             search_response = requests.get(search_url, headers=headers)
 
             content_headers = {
@@ -367,6 +377,7 @@ Reason: {reason}
 
             if search_response.status_code == 200 and search_response.json().get('value'):
                 # File exists, append to it
+                logger.info("Found existing log file, appending content")
                 file_id = search_response.json()['value'][0]['id']
                 get_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/content"
                 get_response = requests.get(get_url, headers=headers)
@@ -376,27 +387,34 @@ Reason: {reason}
                     full_content = existing_content + log_content
 
                     update_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/content"
+                    logger.info("Updating existing log file")
                     update_response = requests.put(update_url, headers=content_headers, data=full_content.encode('utf-8'))
 
                     if update_response.status_code not in [200, 201]:
                         logger.error(f"Failed to update log file. Status: {update_response.status_code}")
                         logger.error(f"Response: {update_response.text}")
+                        raise Exception(f"Failed to update log file. Status: {update_response.status_code}")
                 else:
                     logger.error(f"Failed to get existing log content. Status: {get_response.status_code}")
+                    raise Exception(f"Failed to get existing log content. Status: {get_response.status_code}")
             else:
                 # Create new file
                 create_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/root:/{log_filename}:/content"
+                logger.info("Creating new log file")
                 create_response = requests.put(create_url, headers=content_headers, data=log_content.encode('utf-8'))
 
                 if create_response.status_code not in [200, 201]:
                     logger.error(f"Failed to create log file. Status: {create_response.status_code}")
                     logger.error(f"Response: {create_response.text}")
+                    raise Exception(f"Failed to create log file. Status: {create_response.status_code}")
 
             logger.info(f"Successfully logged rename operation: {original_name} -> {new_name}")
+            return True
 
         except Exception as e:
             logger.error(f"Failed to log rename operation: {str(e)}")
-            logger.error("Stack trace:", exc_info=True)
+            logger.error("Log creation error details:", exc_info=True)
+            raise
 
     def scan_for_long_paths(self, library_name):
         """Scan library for files with problematic path lengths"""
@@ -483,25 +501,29 @@ Reason: {reason}
                     if response.status_code in [200, 201]:
                         logger.info(f"Successfully renamed {old_name} to {new_name}")
 
-                        # Create rename log entry for this specific file
-                        try:
-                            self._create_rename_log(
-                                library_name,
-                                old_name,
-                                new_name,
-                                reason="Bulk rename operation"
-                            )
-                            logger.info(f"Created log entry for rename: {old_name} -> {new_name}")
-                        except Exception as log_error:
-                            logger.error(f"Failed to create log entry for {old_name}: {str(log_error)}")
-
-                        results.append({
+                        # First create the success result
+                        result = {
                             'old_name': old_name,
                             'new_name': new_name,
                             'success': True,
                             'file_id': file_id,
                             'error': None
-                        })
+                        }
+                        results.append(result)
+
+                        # Then create the log entry
+                        logger.info(f"Creating log entry for: {old_name} -> {new_name}")
+                        try:
+                            self._create_rename_log(
+                                library_name,
+                                old_name,
+                                new_name,
+                                reason=f"Bulk rename operation at {datetime.datetime.now().isoformat()}"
+                            )
+                            logger.info(f"Successfully created log entry for: {old_name} -> {new_name}")
+                        except Exception as log_error:
+                            logger.error(f"Failed to create log entry for {old_name}: {str(log_error)}")
+                            logger.error("Log error details:", exc_info=True)
                     else:
                         error_message = response.text
                         logger.error(f"Failed to rename {old_name}: {error_message}")
@@ -514,6 +536,7 @@ Reason: {reason}
                         })
                 except Exception as e:
                     logger.error(f"Error processing rename for {operation.get('old_name', 'unknown')}: {str(e)}")
+                    logger.error("Rename error details:", exc_info=True)
                     results.append({
                         'old_name': operation.get('old_name', 'unknown'),
                         'new_name': operation.get('new_name', 'unknown'),
@@ -526,6 +549,7 @@ Reason: {reason}
 
         except Exception as e:
             logger.error(f"Failed to perform bulk rename: {str(e)}")
+            logger.error("Bulk rename error details:", exc_info=True)
             raise
 
     def create_test_library(self):
