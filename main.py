@@ -682,41 +682,72 @@ def show_admin_panel():
                     st.write(f"MFA Enabled: {'Yes' if user.mfa_enabled else 'No'}")
                     st.write(f"Tenant: {user.tenant.name if user.tenant else 'None'}")
 
-                    if st.button("Reset MFA", key=f"reset_mfa_{user.id}"):
-                        user.mfa_secret = None
-                        user.mfa_enabled = False
-                        db.session.commit()
-                        st.success("MFA reset successfully!")
-                        st.rerun()
-
                     # Check if this is the last admin
                     is_last_admin = user.is_admin and admin_count <= 1
                     can_delete = not is_last_admin
 
                     # Add delete button with appropriate warning
-                    if st.button("Delete User", key=f"delete_user_{user.id}", disabled=not can_delete):
-                        try:
-                            # Double-check admin count before deletion
-                            current_admin_count = User.query.filter_by(is_admin=True).count()
-                            if user.is_admin and current_admin_count <= 1:
-                                st.error("Cannot delete the last admin user!")
-                            else:
-                                # Proceed with deletion
-                                db.session.delete(user)
-                                db.session.commit()
-                                logger.info(f"User deleted successfully: {user.email}")
-                                st.success("User deleted successfully!")
-                                time.sleep(1)
-                                st.rerun()
-                        except Exception as e:
-                            logger.error(f"Error deleting user: {str(e)}")
-                            st.error(f"Error deleting user: {str(e)}")
+                    col1, col2 = st.columns([1, 3])
+                    with col1:
+                        if st.button("Delete User", key=f"delete_user_{user.id}", disabled=not can_delete):
+                            try:
+                                # Double-check admin count before deletion
+                                current_admin_count = User.query.filter_by(is_admin=True).count()
+                                if user.is_admin and current_admin_count <= 1:
+                                    st.error("Cannot delete the last admin user!")
+                                else:
+                                    # Refresh session and get latest user instance
+                                    db.session.expire_all()
+                                    user_to_delete = User.query.get(user.id)
 
-                    # Show appropriate warning message
-                    if is_last_admin:
-                        st.warning("This is the last admin user - create another admin user before deleting this one")
-                    elif user.is_admin:
-                        st.info("You can delete this admin user because other admin users exist")
+                                    if user_to_delete:
+                                        logger.info(f"Starting deletion process for user: {user_to_delete.email}")
+
+                                        # Remove related records first
+                                        if user_to_delete.mfa_secret:
+                                            user_to_delete.mfa_secret = None
+                                            user_to_delete.mfa_enabled = False
+                                            db.session.flush()
+
+                                        # Delete the user
+                                        db.session.delete(user_to_delete)
+                                        db.session.flush()
+
+                                        try:
+                                            db.session.commit()
+                                            logger.info(f"User deleted successfully: {user_to_delete.email}")
+                                            st.success(f"User {user_to_delete.email} deleted successfully!")
+                                            time.sleep(1)
+                                            st.rerun()
+                                        except Exception as commit_error:
+                                            db.session.rollback()
+                                            logger.error(f"Error committing user deletion: {str(commit_error)}")
+                                            st.error(f"Failed to delete user: {str(commit_error)}")
+                                    else:
+                                        logger.error(f"User not found for deletion: ID {user.id}")
+                                        st.error("User not found")
+                            except Exception as e:
+                                logger.error(f"Error in delete user process: {str(e)}")
+                                st.error(f"Error deleting user: {str(e)}")
+                                db.session.rollback()
+
+                    with col2:
+                        # Show appropriate warning message
+                        if is_last_admin:
+                            st.warning("This is the last admin user - create another admin user before deleting this one")
+                        elif user.is_admin:
+                            st.info("You can delete this admin user because other admin users exist")
+
+                    if st.button("Reset MFA", key=f"reset_mfa_{user.id}"):
+                        try:
+                            user.mfa_secret = None
+                            user.mfa_enabled = False
+                            db.session.commit()
+                            st.success("MFA reset successfully!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Error resetting MFA: {str(e)}")
+                            db.session.rollback()
 
         with tenants_tab:
             st.write("#### Manage Tenants")
@@ -758,10 +789,13 @@ def show_admin_panel():
                     st.write(f"Users: {len(tenant.users)}")
 
                     if st.button("Delete Tenant", key=f"delete_tenant_{tenant.id}"):
-                        db.session.delete(tenant)
-                        db.session.commit()
-                        st.success("Tenant deleted successfully!")
-                        st.rerun()
+                        try:
+                            db.session.delete(tenant)
+                            db.session.commit()
+                            st.success("Tenant deleted successfully!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Error deleting tenant: {str(e)}")
 
         with credentials_tab:
             st.write("#### Manage Client Credentials")
@@ -804,10 +838,13 @@ def show_admin_panel():
                     st.write(f"Last Updated: {cred.last_updated}")
 
                     if st.button("Delete Credentials", key=f"delete_cred_{cred.id}"):
-                        db.session.delete(cred)
-                        db.session.commit()
-                        st.success("Credentials deleted successfully!")
-                        st.rerun()
+                        try:
+                            db.session.delete(cred)
+                            db.session.commit()
+                            st.success("Credentials deleted successfully!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Error deleting credentials: {str(e)}")
 
 def show_library_selector():
     """Display SharePoint library selector"""
@@ -839,7 +876,6 @@ def show_library_selector():
         if "authentication" in str(e).lower():
             st.session_state.authenticated = False
             st.rerun()
-
 
 
 def main():

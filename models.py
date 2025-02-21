@@ -9,7 +9,19 @@ logger = logging.getLogger(__name__)
 
 db = SQLAlchemy()
 
+# Add SQLAlchemy event listeners for debugging
+@db.event.listens_for(db.session, 'after_commit')
+def after_commit(session):
+    logger.info("Transaction committed successfully")
+
+@db.event.listens_for(db.session, 'after_rollback')
+def after_rollback(session):
+    logger.info("Transaction rolled back")
+
 class User(UserMixin, db.Model):
+    """User model with cascade behavior for clean deletions"""
+    __tablename__ = 'user'
+
     id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(120), unique=True, nullable=False)
     password_hash = db.Column(db.LargeBinary, nullable=False)
@@ -17,13 +29,14 @@ class User(UserMixin, db.Model):
     is_active = db.Column(db.Boolean, default=True)
     mfa_secret = db.Column(db.String(32))
     mfa_enabled = db.Column(db.Boolean, default=False)
-    tenant_id = db.Column(db.Integer, db.ForeignKey('tenant.id'))
+    tenant_id = db.Column(db.Integer, db.ForeignKey('tenant.id', ondelete='SET NULL'))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     def set_password(self, password):
         if isinstance(password, str):
             password = password.encode('utf-8')
         self.password_hash = bcrypt.hashpw(password, bcrypt.gensalt())
+        logger.info(f"Password set for user {self.email}")
 
     def check_password(self, password):
         if not self.password_hash:
@@ -32,7 +45,8 @@ class User(UserMixin, db.Model):
             password = password.encode('utf-8')
         try:
             return bcrypt.checkpw(password, self.password_hash)
-        except Exception:
+        except Exception as e:
+            logger.error(f"Password check error for {self.email}: {str(e)}")
             return False
 
     def get_mfa_uri(self):
@@ -70,11 +84,11 @@ class Tenant(db.Model):
     subscription_end = db.Column(db.DateTime)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     users = db.relationship('User', backref='tenant', lazy=True)
-    client_credentials = db.relationship('ClientCredential', backref='tenant', lazy=True)
+    client_credentials = db.relationship('ClientCredential', backref='tenant', lazy=True, cascade='all, delete-orphan')
 
 class ClientCredential(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    tenant_id = db.Column(db.Integer, db.ForeignKey('tenant.id'))
+    tenant_id = db.Column(db.Integer, db.ForeignKey('tenant.id', ondelete='CASCADE'))
     client_id = db.Column(db.String(100), nullable=False)
     client_secret = db.Column(db.String(100), nullable=False)
     tenant_id_azure = db.Column(db.String(100), nullable=False)
