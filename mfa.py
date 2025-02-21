@@ -68,7 +68,14 @@ def show_mfa_setup():
 
                     # Verification form
                     with st.form("mfa_setup_form"):
-                        st.info("⚠️ Important: Wait for a new code to appear in your authenticator app before entering it below.")
+                        st.warning("⚠️ Important: Please follow these steps carefully:")
+                        st.markdown("""
+                        1. Wait for a new code to appear in your authenticator
+                        2. Enter the code immediately when it appears
+                        3. Make sure your device's time is correctly synchronized
+                        4. Only use digits 0-9 (no spaces or special characters)
+                        """)
+
                         verification_code = st.text_input(
                             "Enter verification code from your authenticator app",
                             help="Enter the 6-digit code shown in your authenticator app",
@@ -77,7 +84,11 @@ def show_mfa_setup():
                         submit = st.form_submit_button("Verify and Enable 2FA")
 
                         if submit:
-                            if verification_code:
+                            if not verification_code:
+                                st.error("Please enter a verification code.")
+                            elif not verification_code.isdigit() or len(verification_code) != 6:
+                                st.error("Please enter exactly 6 digits (0-9 only).")
+                            else:
                                 if user.verify_mfa(verification_code):
                                     user.mfa_enabled = True
                                     db.session.commit()
@@ -90,10 +101,9 @@ def show_mfa_setup():
                                     1. Your device's time is correctly synchronized
                                     2. You're using a fresh code from your authenticator
                                     3. You selected "Work or school account" during setup
+                                    4. You entered the code immediately after it appeared
                                     """)
                                     logger.warning(f"Failed MFA verification attempt for user {user.email}")
-                            else:
-                                st.error("Please enter a verification code.")
 
                 except Exception as e:
                     logger.error(f"Error in MFA setup: {str(e)}")

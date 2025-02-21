@@ -50,12 +50,17 @@ class User(UserMixin, db.Model):
             return False
 
         try:
+            # Validate code format
+            if not code.isdigit() or len(code) != 6:
+                logger.warning(f"Invalid code format for user {self.email}")
+                return False
+
             totp = pyotp.TOTP(self.mfa_secret)
-            # Increase the valid window to account for time drift
-            # valid_window=2 means checking one interval before and after
-            return totp.verify(code, valid_window=2)
+            # Increase window size to ±2 intervals (±60 seconds)
+            # This gives more tolerance for time drift
+            return totp.verify(code, valid_window=3)
         except Exception as e:
-            logger.error(f"MFA verification error: {str(e)}")
+            logger.error(f"MFA verification error for user {self.email}: {str(e)}")
             return False
 
 class Tenant(db.Model):
