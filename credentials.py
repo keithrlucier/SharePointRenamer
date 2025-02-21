@@ -50,6 +50,12 @@ def show_credentials_manager():
                     st.success("Credentials saved successfully!")
                     logger.info("Azure credentials updated successfully")
 
+                    # Reset navigation state to go back to home/connection page
+                    st.session_state['current_page'] = 'home'
+                    st.session_state['show_credentials'] = False
+                    st.session_state['show_setup'] = False
+                    st.rerun()
+
                 except Exception as e:
                     st.error(f"Error saving credentials: {str(e)}")
                     logger.error(f"Error saving credentials: {str(e)}")

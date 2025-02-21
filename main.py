@@ -584,24 +584,15 @@ def authenticate():
             st.session_state['show_credentials'] = True
             st.session_state['show_setup'] = False
             st.session_state['current_page'] = 'credentials'
+            st.rerun()
 
     with col2:
         if st.button("📚 View Setup Guide", key="auth_setup_guide"):
             st.session_state['show_setup'] = True
             st.session_state['show_credentials'] = False
             st.session_state['current_page'] = 'setup'
+            st.rerun()
 
-
-    if st.session_state.get('show_credentials', False):
-        show_credentials_manager()
-        return
-
-    if st.session_state.get('show_setup', False):
-        show_setup_guide()
-        if st.button("← Back to Login", key="setup_back_to_login"):
-            st.session_state['show_setup'] = False
-            st.session_state['current_page'] = 'home'
-        return
 
     with st.form("authentication_form"):
         site_url = st.text_input("SharePoint Site URL",
