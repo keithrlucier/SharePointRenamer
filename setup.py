@@ -46,7 +46,28 @@ def show_setup_guide():
     5. **Important:** Copy the secret value immediately - you won't be able to see it again!
     """)
 
-    st.write("### Step 4: Configure Application")
+    st.write("### Step 4: Set Up Two-Factor Authentication")
+    st.markdown("""
+    For enhanced security, we support two-factor authentication using authenticator apps.
+
+    #### Authenticator App Setup:
+    1. Install a supported authenticator app on your mobile device:
+        - Microsoft Authenticator (recommended for SharePoint integration)
+        - Google Authenticator
+        - Authy
+
+    2. When adding this application to your authenticator:
+        - Select "Work or school account" when prompted
+        - This is important because our app integrates with SharePoint Enterprise
+        - Selecting the wrong account type may cause verification issues
+
+    3. Tips for successful 2FA setup:
+        - Ensure your device's time is synchronized correctly
+        - Wait for the code to refresh before using it
+        - Enter the code promptly when verifying
+    """)
+
+    st.write("### Step 5: Configure Application")
 
     # Create columns for a cleaner layout
     col1, col2 = st.columns(2)
@@ -75,6 +96,12 @@ def show_setup_guide():
         - Verify all credentials are correct
         - Ensure admin consent is granted for API permissions
         - Check if the client secret hasn't expired
+
+        #### 2FA Issues
+        - Verify you selected "Work or school account" in authenticator
+        - Ensure your device's time is correctly synchronized
+        - Try waiting for a new code if verification fails
+        - Enter the code as soon as it appears in your authenticator
 
         #### Access Denied
         - Verify the Azure AD app has the correct API permissions

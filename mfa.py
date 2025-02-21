@@ -29,19 +29,27 @@ def show_mfa_setup():
             Two-factor authentication adds an extra layer of security to your account.
 
             Setup Instructions:
-            1. Install an authenticator app on your device (like Microsoft Authenticator or Google Authenticator)
-            2. Scan the QR code below with your authenticator app
-            3. When prompted, select "Work or school account" as this is an enterprise application
-            4. Enter the 6-digit code shown in your authenticator app below
+            1. Install an authenticator app on your device:
+               - Microsoft Authenticator (recommended)
+               - Google Authenticator
+               - Authy
+
+            2. Open your authenticator app and add a new account:
+               - Click '+' or 'Add Account'
+               - Choose 'Scan QR Code'
+               - When prompted, select "Work or school account"
+
+            3. Scan the QR code below
+            4. Enter the 6-digit code shown in your authenticator app
             """)
 
             try:
-                # Generate QR code
+                # Generate QR code with smaller size
                 qr = qrcode.QRCode(
                     version=1,
                     error_correction=qrcode.constants.ERROR_CORRECT_L,
-                    box_size=10,
-                    border=4,
+                    box_size=6,  # Reduced from 10
+                    border=2,    # Reduced from 4
                 )
                 qr.add_data(user.get_mfa_uri())
                 qr.make(fit=True)
@@ -62,7 +70,8 @@ def show_mfa_setup():
                 with st.form("mfa_setup_form"):
                     verification_code = st.text_input(
                         "Enter verification code from your authenticator app",
-                        help="Enter the 6-digit code shown in your authenticator app"
+                        help="Enter the 6-digit code shown in your authenticator app",
+                        max_chars=6
                     )
                     submit = st.form_submit_button("Verify and Enable 2FA")
 
