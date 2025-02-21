@@ -631,6 +631,7 @@ def show_login():
                     st.error("Invalid email or password")
 
 
+
 def show_admin_panel():
     """Display admin panel"""
     st.write("### Admin Panel")
@@ -641,6 +642,7 @@ def show_admin_panel():
     with users_tab:
         st.write("#### Manage Users")
         users = User.query.all()
+        admin_count = User.query.filter_by(is_admin=True).count()
 
         # Create new user
         with st.expander("Create New User"):
@@ -671,7 +673,6 @@ def show_admin_panel():
 
         # List existing users
         st.write("#### Existing Users")
-        admin_count = User.query.filter_by(is_admin=True).count()
 
         for user in users:
             with st.expander(f"User: {user.email}"):
@@ -686,18 +687,27 @@ def show_admin_panel():
                     st.success("MFA reset successfully!")
                     st.rerun()
 
-                # Prevent deletion of last admin user
-                can_delete = not (user.is_admin and admin_count == 1)
+                # Check if this is the last admin
+                is_last_admin = user.is_admin and admin_count <= 1
+                can_delete = not is_last_admin
 
-                # Add delete confirmation
-                if st.button("Delete User", key=f"delete_user_{user.id}", disabled=not can_delete):
+                # Add delete button with appropriate warning
+                delete_button = st.button(
+                    "Delete User",
+                    key=f"delete_user_{user.id}",
+                    disabled=not can_delete
+                )
+
+                if delete_button:
                     try:
-                        # Check if it's the last admin
-                        if user.is_admin and admin_count <= 1:
-                            st.error("Cannot delete the last admin user!")
-                            return
+                        # Double-check admin count before deletion
+                        if user.is_admin:
+                            current_admin_count = User.query.filter_by(is_admin=True).count()
+                            if current_admin_count <= 1:
+                                st.error("Cannot delete the last admin user!")
+                                return
 
-                        # Clean up user data
+                        # Proceed with deletion
                         db.session.delete(user)
                         db.session.commit()
                         logger.info(f"User deleted successfully: {user.email}")
@@ -707,8 +717,11 @@ def show_admin_panel():
                         logger.error(f"Error deleting user: {str(e)}")
                         st.error(f"Error deleting user: {str(e)}")
 
-                if not can_delete:
-                    st.warning("Cannot delete the last admin user")
+                # Show appropriate warning message
+                if is_last_admin:
+                    st.warning("This is the last admin user - create another admin user before deleting this one")
+                elif user.is_admin:
+                    st.info("You can delete this admin user because other admin users exist")
 
     with tenants_tab:
         st.write("#### Manage Tenants")
