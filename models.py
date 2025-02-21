@@ -3,6 +3,9 @@ from flask_login import UserMixin
 from datetime import datetime
 import bcrypt
 import pyotp
+import logging
+
+logger = logging.getLogger(__name__)
 
 db = SQLAlchemy()
 
@@ -43,11 +46,17 @@ class User(UserMixin, db.Model):
 
     def verify_mfa(self, code):
         """Verify MFA code with a larger window to account for time drift"""
-        if not self.mfa_enabled or not self.mfa_secret:
+        if not self.mfa_enabled or not self.mfa_secret or not code:
             return False
-        totp = pyotp.TOTP(self.mfa_secret)
-        # Check current and adjacent intervals to account for time skew
-        return totp.verify(code, valid_window=1)  # This allows for 30 seconds before and after
+
+        try:
+            totp = pyotp.TOTP(self.mfa_secret)
+            # Increase the valid window to account for time drift
+            # valid_window=2 means checking one interval before and after
+            return totp.verify(code, valid_window=2)
+        except Exception as e:
+            logger.error(f"MFA verification error: {str(e)}")
+            return False
 
 class Tenant(db.Model):
     id = db.Column(db.Integer, primary_key=True)

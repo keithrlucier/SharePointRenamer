@@ -9,97 +9,103 @@ import logging
 logger = logging.getLogger(__name__)
 
 def show_mfa_setup():
-    """Display MFA setup and management interface"""
-    st.write("### Two-Factor Authentication Setup")
+        """Display MFA setup and management interface"""
+        st.write("### Two-Factor Authentication Setup")
 
-    if 'user' not in st.session_state:
-        st.error("Please log in first")
-        return
-
-    # Use Flask app context for database operations
-    with app.app_context():
-        user = User.query.get(st.session_state['user'])
-
-        if not user:
-            st.error("User not found")
+        if 'user' not in st.session_state:
+            st.error("Please log in first")
             return
 
-        if not user.mfa_enabled:
-            st.info("""
-            Two-factor authentication adds an extra layer of security to your account.
+        # Use Flask app context for database operations
+        with app.app_context():
+            user = User.query.get(st.session_state['user'])
 
-            Setup Instructions:
-            1. Install an authenticator app on your device:
-               - Microsoft Authenticator (recommended)
-               - Google Authenticator
-               - Authy
+            if not user:
+                st.error("User not found")
+                return
 
-            2. Open your authenticator app and add a new account:
-               - Click '+' or 'Add Account'
-               - Choose 'Scan QR Code'
-               - When prompted, select "Work or school account"
+            if not user.mfa_enabled:
+                st.info("""
+                Two-factor authentication adds an extra layer of security to your account.
 
-            3. Scan the QR code below
-            4. Enter the 6-digit code shown in your authenticator app
-            """)
+                Setup Instructions:
+                1. Install an authenticator app on your device:
+                   - Microsoft Authenticator (recommended)
+                   - Google Authenticator
+                   - Authy
 
-            try:
-                # Generate QR code with smaller size
-                qr = qrcode.QRCode(
-                    version=1,
-                    error_correction=qrcode.constants.ERROR_CORRECT_L,
-                    box_size=6,  # Reduced from 10
-                    border=2,    # Reduced from 4
-                )
-                qr.add_data(user.get_mfa_uri())
-                qr.make(fit=True)
+                2. Open your authenticator app and add a new account:
+                   - Click '+' or 'Add Account'
+                   - Choose 'Scan QR Code'
+                   - When prompted, select "Work or school account"
 
-                # Convert QR code to image
-                img_buf = io.BytesIO()
-                img = qr.make_image(fill_color="black", back_color="white")
-                img.save(img_buf, format='PNG')
+                3. Scan the QR code below
+                4. Enter the 6-digit code shown in your authenticator app
+                """)
 
-                # Display QR code
-                st.image(img_buf.getvalue(), caption="Scan this QR code with your authenticator app")
-
-                # Manual entry option
-                st.write("Or enter this code manually in your authenticator app:")
-                st.code(user.mfa_secret)
-
-                # Verification form
-                with st.form("mfa_setup_form"):
-                    verification_code = st.text_input(
-                        "Enter verification code from your authenticator app",
-                        help="Enter the 6-digit code shown in your authenticator app",
-                        max_chars=6
+                try:
+                    # Generate QR code with smaller size
+                    qr = qrcode.QRCode(
+                        version=1,
+                        error_correction=qrcode.constants.ERROR_CORRECT_L,
+                        box_size=6,  # Reduced from 10
+                        border=2,    # Reduced from 4
                     )
-                    submit = st.form_submit_button("Verify and Enable 2FA")
+                    qr.add_data(user.get_mfa_uri())
+                    qr.make(fit=True)
 
-                    if submit:
-                        if verification_code:
-                            if user.verify_mfa(verification_code):
-                                user.mfa_enabled = True
-                                db.session.commit()
-                                logger.info(f"MFA enabled successfully for user {user.email}")
-                                st.success("Two-factor authentication enabled successfully!")
-                                st.rerun()
+                    # Convert QR code to image
+                    img_buf = io.BytesIO()
+                    img = qr.make_image(fill_color="black", back_color="white")
+                    img.save(img_buf, format='PNG')
+
+                    # Display QR code
+                    st.image(img_buf.getvalue(), caption="Scan this QR code with your authenticator app")
+
+                    # Manual entry option
+                    st.write("Or enter this code manually in your authenticator app:")
+                    st.code(user.mfa_secret)
+
+                    # Verification form
+                    with st.form("mfa_setup_form"):
+                        st.info("⚠️ Important: Wait for a new code to appear in your authenticator app before entering it below.")
+                        verification_code = st.text_input(
+                            "Enter verification code from your authenticator app",
+                            help="Enter the 6-digit code shown in your authenticator app",
+                            max_chars=6
+                        )
+                        submit = st.form_submit_button("Verify and Enable 2FA")
+
+                        if submit:
+                            if verification_code:
+                                if user.verify_mfa(verification_code):
+                                    user.mfa_enabled = True
+                                    db.session.commit()
+                                    logger.info(f"MFA enabled successfully for user {user.email}")
+                                    st.success("Two-factor authentication enabled successfully!")
+                                    st.rerun()
+                                else:
+                                    st.error("Invalid verification code. Please ensure:")
+                                    st.markdown("""
+                                    1. Your device's time is correctly synchronized
+                                    2. You're using a fresh code from your authenticator
+                                    3. You selected "Work or school account" during setup
+                                    """)
+                                    logger.warning(f"Failed MFA verification attempt for user {user.email}")
                             else:
-                                st.error("Invalid verification code. Please make sure your device's time is correct and try again.")
-                                logger.warning(f"Failed MFA verification attempt for user {user.email}")
-                        else:
-                            st.error("Please enter a verification code.")
+                                st.error("Please enter a verification code.")
 
-            except Exception as e:
-                logger.error(f"Error in MFA setup: {str(e)}")
-                st.error("An error occurred during MFA setup. Please try again.")
+                except Exception as e:
+                    logger.error(f"Error in MFA setup: {str(e)}")
+                    st.error("An error occurred during MFA setup. Please try again.")
 
-        else:
-            st.success("Two-factor authentication is enabled")
+            else:
+                st.success("Two-factor authentication is enabled")
 
-            if st.button("Disable 2FA", type="secondary"):
-                user.mfa_enabled = False
-                user.mfa_secret = None
-                db.session.commit()
-                logger.info(f"MFA disabled for user {user.email}")
-                st.success("Two-factor authentication disabled")
-                st.rerun()
+                if st.button("Disable 2FA", type="secondary"):
+                    user.mfa_enabled = False
+                    user.mfa_secret = None
+                    db.session.commit()
+                    logger.info(f"MFA disabled for user {user.email}")
+                    st.success("Two-factor authentication disabled")
+                    st.rerun()
