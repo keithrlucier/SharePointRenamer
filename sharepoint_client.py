@@ -366,26 +366,31 @@ New Name: {new_name}
 Reason: {reason}
 ----------------------------------------
 """
-            # First try to find existing log file
-            logger.info("Searching for existing log file")
-            search_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/root/search(q='{log_filename}')"
-            search_response = requests.get(search_url, headers=headers)
-
             content_headers = {
                 'Authorization': f'Bearer {self.access_token}',
                 'Content-Type': 'text/plain; charset=utf-8'
             }
 
-            # Using a retry mechanism for file operations
-            max_retries = 3
-            retry_count = 0
-            backoff_time = 1  # Starting backoff time in seconds
+            # First try to create the file if it doesn't exist
+            create_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/root:/{log_filename}:/content"
+            try:
+                logger.info("Attempting to create log file if it doesn't exist")
+                create_response = requests.put(
+                    create_url,
+                    headers=content_headers,
+                    data=log_entry.encode('utf-8')
+                )
 
-            while retry_count < max_retries:
-                try:
+                if create_response.status_code in [200, 201]:
+                    logger.info("Created new log file successfully")
+                    return True
+                elif create_response.status_code == 409:  # File already exists
+                    logger.info("Log file already exists, will append to it")
+                    # Get the file ID from the error response
+                    search_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/root/search(q='{log_filename}')"
+                    search_response = requests.get(search_url, headers=headers)
+
                     if search_response.status_code == 200 and search_response.json().get('value'):
-                        # File exists, append to it
-                        logger.info("Found existing log file, appending content")
                         file_id = search_response.json()['value'][0]['id']
 
                         # Get current content
@@ -394,12 +399,10 @@ Reason: {reason}
 
                         if get_response.status_code == 200:
                             existing_content = get_response.text
-                            # Always append new entry, remove duplicate check
                             full_content = existing_content + log_entry
 
-                            # Update the file
+                            # Update with combined content
                             update_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{file_id}/content"
-                            logger.info("Updating existing log file")
                             update_response = requests.put(
                                 update_url,
                                 headers=content_headers,
@@ -407,38 +410,18 @@ Reason: {reason}
                             )
 
                             if update_response.status_code in [200, 201]:
-                                logger.info("Successfully updated log file")
+                                logger.info("Successfully appended to existing log file")
                                 return True
                             else:
                                 raise Exception(f"Failed to update log file. Status: {update_response.status_code}")
-                        else:
-                            raise Exception(f"Failed to read existing log file. Status: {get_response.status_code}")
                     else:
-                        # Create new file
-                        logger.info("Creating new log file")
-                        create_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/root:/{log_filename}:/content"
-                        create_response = requests.put(
-                            create_url,
-                            headers=content_headers,
-                            data=log_entry.encode('utf-8')
-                        )
+                        raise Exception("Failed to find existing log file")
+                else:
+                    raise Exception(f"Failed to create/update log file. Status: {create_response.status_code}")
 
-                        if create_response.status_code in [200, 201]:
-                            logger.info("Successfully created new log file")
-                            return True
-                        else:
-                            raise Exception(f"Failed to create log file. Status: {create_response.status_code}")
-
-                except Exception as e:
-                    retry_count += 1
-                    if retry_count >= max_retries:
-                        raise Exception(f"Failed to create/update log after {max_retries} retries: {str(e)}")
-
-                    logger.warning(f"Retry {retry_count} of {max_retries} for log file operation: {str(e)}")
-                    time.sleep(backoff_time)  # Wait before retry with exponential backoff
-                    backoff_time *= 2  # Double the backoff time for next retry
-
-            raise Exception("Max retries exceeded for log file operation")
+            except Exception as e:
+                logger.error(f"Error in log file operation: {str(e)}")
+                raise
 
         except Exception as e:
             logger.error(f"Failed to create/update log entry: {str(e)}")
@@ -786,7 +769,7 @@ Reason: {reason}
                     folders[parent_path] = {
                         'id': file.get('Id'),
                         'name': folder_name,
-                        'path': parent_path
+                        'path': parentpath
                     }
 
             return list(folders.values())
