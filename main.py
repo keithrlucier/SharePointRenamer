@@ -583,22 +583,44 @@ def show_login():
     """Display login form"""
     st.write("### Login")
 
-    # Add tabs for login and MFA
-    login_tab, mfa_tab = st.tabs(["Login", "Two-Factor Authentication"])
+    with st.form("login_form"):
+        email = st.text_input("Email")
+        password = st.text_input("Password", type="password")
 
-    with login_tab:
-        with st.form("login_form"):
-            email = st.text_input("Email")
-            password = st.text_input("Password", type="password")
-            submit = st.form_submit_button("Login")
+        # Only show MFA field if user exists and has MFA enabled
+        if 'pending_mfa_user' in st.session_state:
+            st.markdown("---")
+            st.markdown("#### Two-Factor Authentication Required")
+            st.info("Please enter the verification code from your authenticator app")
+            mfa_code = st.text_input("Verification Code", key="mfa_input")
 
-            if submit and email and password:
+        submit = st.form_submit_button("Login")
+
+        if submit:
+            if email and password:
                 user = User.query.filter_by(email=email).first()
                 if user and user.check_password(password):
                     if user.mfa_enabled:
-                        st.session_state['pending_mfa_user'] = user.id
-                        st.rerun()
+                        if 'pending_mfa_user' not in st.session_state:
+                            # First step: Show MFA input
+                            st.session_state['pending_mfa_user'] = user.id
+                            st.rerun()
+                        else:
+                            # Second step: Verify MFA
+                            mfa_code = st.session_state.get("mfa_input")
+                            if mfa_code and user.verify_mfa(mfa_code):
+                                st.session_state['user'] = user.id
+                                st.session_state['is_admin'] = user.is_admin
+                                st.session_state['authenticated'] = True
+                                if 'pending_mfa_user' in st.session_state:
+                                    del st.session_state['pending_mfa_user']
+                                st.success("Login successful!")
+                                time.sleep(1)
+                                st.rerun()
+                            else:
+                                st.error("Invalid verification code")
                     else:
+                        # No MFA required
                         st.session_state['user'] = user.id
                         st.session_state['is_admin'] = user.is_admin
                         st.session_state['authenticated'] = True
@@ -608,24 +630,6 @@ def show_login():
                 else:
                     st.error("Invalid email or password")
 
-    with mfa_tab:
-        if 'pending_mfa_user' in st.session_state:
-            user = User.query.get(st.session_state['pending_mfa_user'])
-            with st.form("mfa_form"):
-                mfa_code = st.text_input("Enter MFA Code")
-                mfa_submit = st.form_submit_button("Verify")
-
-                if mfa_submit and mfa_code:
-                    if user.verify_mfa(mfa_code):
-                        st.session_state['user'] = user.id
-                        st.session_state['is_admin'] = user.is_admin
-                        st.session_state['authenticated'] = True
-                        del st.session_state['pending_mfa_user']
-                        st.success("MFA verification successful!")
-                        time.sleep(1)
-                        st.rerun()
-                    else:
-                        st.error("Invalid MFA code")
 
 def show_admin_panel():
     """Display admin panel"""
@@ -806,7 +810,7 @@ def show_library_selector():
                 st.warning("No document libraries found in this SharePoint site.")
                 return
 
-        # Add Create Test Library button
+        # Add Create TestLibrary button
         if st.button("🧪 Create Test Library"):
             with st.spinner("Creating test library withsample data..."):
                 try:
