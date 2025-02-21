@@ -90,7 +90,7 @@ def show_navigation():
     </style>
     """, unsafe_allow_html=True)
 
-    col1, col2, col3, col4, col5 = st.columns([2, 1, 1, 1, 1])
+    col1, col2, col3, col4, col5, col6 = st.columns([2, 1, 1, 1, 1, 1])
 
     with col1:
         st.markdown(
@@ -109,7 +109,6 @@ def show_navigation():
     st.markdown(f'<span class="connection-status {status_class}">{connection_status}</span>', unsafe_allow_html=True)
 
     with col2:
-        # Home button always visible
         if st.button("🏠 Libraries", key="nav_home", use_container_width=True):
             st.session_state['current_page'] = 'home'
             st.session_state['show_setup'] = False
@@ -138,6 +137,13 @@ def show_navigation():
             else:
                 st.warning("Please connect to SharePoint first to access file renaming.")
 
+    with col6:
+        if 'user' in st.session_state:
+            if st.button("🔐 2FA Setup", key="nav_2fa", use_container_width=True):
+                st.session_state['current_page'] = 'mfa_setup'
+                st.session_state['show_setup'] = False
+                st.session_state['show_credentials'] = False
+
 def initialize_session_state():
     """Initialize session state variables"""
     if 'authenticated' not in st.session_state:
@@ -158,7 +164,6 @@ def initialize_session_state():
         st.session_state['problematic_files'] = []
     if 'current_page' not in st.session_state:
         st.session_state['current_page'] = 'home'
-
 
 def apply_rename_pattern(filename, pattern):
     """Apply rename pattern to filename"""
@@ -823,51 +828,37 @@ def show_library_selector():
 
 
 def main():
-    """Main application entry point"""
+    """Main application logic"""
     initialize_session_state()
+    show_navigation()
 
-    # Add security headers
-    st.markdown("""
-        <meta http-equiv="Content-Security-Policy" 
-              content="default-src 'self' 'unsafe-inline' 'unsafe-eval' data: https://*.streamlit.app https://*.replit.dev https://streamlit.io;">
-        <meta http-equiv="Strict-Transport-Security" 
-              content="max-age=31536000; includeSubDomains">
-        <meta http-equiv="X-Content-Type-Options" content="nosniff">
-        <meta http-equiv="X-Frame-Options" content="SAMEORIGIN">
-    """, unsafe_allow_html=True)
-
-    # Check if user is logged in
     if 'user' not in st.session_state:
         show_login()
         return
 
-    # Show admin panel for admin users
-    if st.session_state.get('is_admin', False):
-        show_admin_panel()
-        if st.sidebar.button("Logout"):
-            del st.session_state['user']
-            del st.session_state['is_admin']
-            st.rerun()
-        return
-
-    # Regular user flow
-    show_navigation()
-
-    if st.sidebar.button("Logout"):
-        del st.session_state['user']
-        if 'is_admin' in st.session_state:
-            del st.session_state['is_admin']
-        st.rerun()
-
-    # Handle page routing based on current_page
-    if st.session_state.get('show_setup', False):
+    # Show appropriate page based on navigation state
+    if st.session_state.get('current_page') == 'mfa_setup':
+        from mfa import show_mfa_setup
+        show_mfa_setup()
+    elif st.session_state.get('show_setup', False):
         show_setup_guide()
     elif st.session_state.get('show_credentials', False):
         show_credentials_manager()
-    elif not st.session_state.authenticated:
-        st.warning("⚠️ Please connect to SharePoint to access libraries and file management features.")
     else:
-        show_library_selector()
+        if st.session_state.get('authenticated', False):
+            libraries = st.session_state.client.get_libraries()
+            if libraries:
+                selected_library = st.selectbox(
+                    "Select Library",
+                    options=libraries,
+                    format_func=lambda x: x.replace('_', ' ').title()
+                )
+                if selected_library:
+                    show_file_manager(selected_library)
+            else:
+                st.info("No libraries found. Please check your permissions.")
+        else:
+            st.warning("Please connect to SharePoint using your credentials first.")
 
 if __name__ == "__main__":
     main()

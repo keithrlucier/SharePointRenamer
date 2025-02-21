@@ -1,0 +1,68 @@
+import streamlit as st
+import qrcode
+import io
+from models import User, db
+import pyotp
+
+def show_mfa_setup():
+    """Display MFA setup and management interface"""
+    st.write("### Two-Factor Authentication Setup")
+    
+    if 'user' not in st.session_state:
+        st.error("Please log in first")
+        return
+        
+    user = User.query.get(st.session_state['user'].id)
+    
+    if not user.mfa_enabled:
+        st.info("""
+        Two-factor authentication adds an extra layer of security to your account.
+        Once enabled, you'll need both your password and a verification code from your
+        authenticator app to log in.
+        """)
+        
+        # Generate new secret if not exists
+        if not user.mfa_secret:
+            user.mfa_secret = pyotp.random_base32()
+            db.session.commit()
+        
+        # Generate QR code
+        qr = qrcode.QRCode(version=1, box_size=10, border=5)
+        qr.add_data(user.get_mfa_uri())
+        qr.make(fit=True)
+        
+        # Convert QR code to image
+        img_buf = io.BytesIO()
+        img = qr.make_image(fill_color="black", back_color="white")
+        img.save(img_buf, format='PNG')
+        
+        # Display QR code
+        st.image(img_buf.getvalue(), caption="Scan with your authenticator app")
+        
+        # Manual entry option
+        st.write("Or enter this code manually in your authenticator app:")
+        st.code(user.mfa_secret)
+        
+        # Verification form
+        with st.form("mfa_setup_form"):
+            verification_code = st.text_input("Enter verification code from your authenticator app")
+            submit = st.form_submit_button("Verify and Enable 2FA")
+            
+            if submit:
+                if user.verify_mfa(verification_code):
+                    user.mfa_enabled = True
+                    db.session.commit()
+                    st.success("Two-factor authentication enabled successfully!")
+                    st.rerun()
+                else:
+                    st.error("Invalid verification code. Please try again.")
+    
+    else:
+        st.success("Two-factor authentication is enabled")
+        
+        if st.button("Disable 2FA", type="secondary"):
+            user.mfa_enabled = False
+            user.mfa_secret = None
+            db.session.commit()
+            st.success("Two-factor authentication disabled")
+            st.rerun()
