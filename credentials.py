@@ -20,27 +20,23 @@ def show_credentials_manager():
         client_id = st.text_input(
             "Application (Client) ID",
             type="password",
-            value=os.environ.get("AZURE_CLIENT_ID", ""),
             help="Found in Azure AD App Registration Overview"
         )
 
         tenant_id = st.text_input(
             "Directory (Tenant) ID",
             type="password",
-            value=os.environ.get("AZURE_TENANT_ID", ""),
             help="Found in Azure AD App Registration Overview"
         )
 
         client_secret = st.text_input(
             "Client Secret",
             type="password",
-            value=os.environ.get("AZURE_CLIENT_SECRET", ""),
             help="The secret value from Azure AD App Registration"
         )
 
         site_url = st.text_input(
             "SharePoint Site URL",
-            value=os.environ.get("SHAREPOINT_SITE_URL", ""),
             help="The URL of your SharePoint site (e.g., https://yourtenant.sharepoint.com/sites/yoursite)"
         )
 
