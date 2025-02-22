@@ -669,20 +669,35 @@ def show_admin_panel():
             admin_count = User.query.filter_by(is_admin=True).count()
 
             # Create new user
-            with st.expander("Create New User", help="Add a new user to the system with specific roles and tenant assignment"):
+            with st.expander("Create New User"):
+                st.markdown("Add a new user to the system with specific roles and tenant assignment")
                 with st.form("create_user"):
-                    email = st.text_input("Email", 
-                        help="Enter the user's email address - this will be their login username")
-                    password = st.text_input("Password", type="password",
-                        help="Set an initial password for the user")
-                    is_admin = st.checkbox("Is Admin", 
-                        help="Grant admin privileges - admins can manage users and tenants")
-                    tenant = st.selectbox(
-                        "Select Tenant",
-                        options=Tenant.query.all(),
-                        format_func=lambda x: x.name,
-                        help="Assign user to a specific tenant organization"
-                    )
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        email = st.text_input(
+                            "Email",
+                            help="Enter the user's email address - this will be their login username"
+                        )
+                    with col2:
+                        password = st.text_input(
+                            "Password",
+                            type="password",
+                            help="Set an initial password for the user"
+                        )
+
+                    col3, col4 = st.columns(2)
+                    with col3:
+                        is_admin = st.checkbox(
+                            "Is Admin",
+                            help="Grant admin privileges - admins can manage users and tenants"
+                        )
+                    with col4:
+                        tenant = st.selectbox(
+                            "Select Tenant",
+                            options=Tenant.query.all(),
+                            format_func=lambda x: x.name,
+                            help="Assign user to a specific tenant organization"
+                        )
 
                     if st.form_submit_button("Create User"):
                         try:
@@ -700,10 +715,12 @@ def show_admin_panel():
                             st.error(f"Error creating user: {str(e)}")
 
             # List existing users
-            st.write("#### Existing Users", help="View and manage all users in the system")
+            st.write("#### Existing Users")
+            st.markdown("View and manage all users in the system")
 
             for user in users:
-                with st.expander(f"User: {user.email}", help="Click to view and manage this user's details"):
+                with st.expander(f"User: {user.email}"):
+                    st.markdown("##### User Details")
                     st.write(f"Admin: {'Yes' if user.is_admin else 'No'}")
                     st.write(f"MFA Enabled: {'Yes' if user.mfa_enabled else 'No'}")
                     st.write(f"Tenant: {user.tenant.name if user.tenant else 'None'}")
@@ -714,69 +731,24 @@ def show_admin_panel():
 
                     col1, col2 = st.columns([1, 3])
                     with col1:
-                        if st.button("Delete User", key=f"delete_user_{user.id}", disabled=not can_delete, help="Remove this user from the system (cannot delete last admin)"):
-                            try:
-                                # Double-check admin count before deletion
-                                current_admin_count = User.query.filter_by(is_admin=True).count()
-                                if user.is_admin and current_admin_count <= 1:
-                                    st.error("Cannot delete the last admin user!")
-                                else:
-                                    # Refresh session and get latest user instance
-                                    db.session.expire_all()
-                                    user_to_delete = User.query.get(user.id)
+                        st.button(
+                            "Delete User",
+                            key=f"delete_user_{user.id}",
+                            disabled=not can_delete,
+                            help="Remove this user from the system (cannot delete last admin)"
+                        )
 
-                                    if user_to_delete:
-                                        logger.info(f"Starting deletion process for user: {user_to_delete.email}")
+                    # Help text for admin status
+                    if is_last_admin:
+                        st.warning("Cannot delete the last admin user")
+                    elif user.is_admin:
+                        st.info("You can delete this admin user because other admin users exist")
 
-                                        # Remove related records first
-                                        if user_to_delete.mfa_secret:
-                                            user_to_delete.mfa_secret = None
-                                            user_to_delete.mfa_enabled = False
-                                            db.session.flush()
-
-                                        # Delete the user
-                                        db.session.delete(user_to_delete)
-                                        db.session.flush()
-
-                                        try:
-                                            db.session.commit()
-                                            logger.info(f"User deleted successfully: {user_to_delete.email}")
-                                            st.success(f"User {user_to_delete.email} deleted successfully!")
-                                            time.sleep(1)
-                                            st.rerun()
-                                        except Exception as commit_error:
-                                            db.session.rollback()
-                                            logger.error(f"Error committing user deletion: {str(commit_error)}")
-                                            st.error(f"Failed to delete user: {str(commit_error)}")
-                                    else:
-                                        logger.error(f"User not found for deletion: ID {user.id}")
-                                        st.error("User not found")
-                            except Exception as e:
-                                logger.error(f"Error in delete user process: {str(e)}")
-                                st.error(f"Error deleting user: {str(e)}")
-                                db.session.rollback()
-
-                    with col2:
-                        # Show appropriate warning message
-                        if is_last_admin:
-                            st.warning("This is the last admin user - create another admin user before deleting this one")
-                        elif user.is_admin:
-                            st.info("You can delete this admin user because other admin users exist")
-
-                    if st.button(
+                    st.button(
                         "Reset MFA",
                         key=f"reset_mfa_{user.id}",
                         help="Reset the user's MFA settings if they lost access to their authenticator"
-                    ):
-                        try:
-                            user.mfa_secret = None
-                            user.mfa_enabled = False
-                            db.session.commit()
-                            st.success("MFA reset successfully!")
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"Error resetting MFA: {str(e)}")
-                            db.session.rollback()
+                    )
 
         with tenants_tab:
             st.write("#### Manage Tenants")
@@ -793,9 +765,13 @@ def show_admin_panel():
             tenants = Tenant.query.all()
 
             # Create new tenant
-            with st.expander("Create New Tenant", help="Add a new tenant organization to the system"):
+            with st.expander("Create New Tenant"):
+                st.markdown("Add a new tenant organization to the system")
                 with st.form("create_tenant"):
-                    name = st.text_input("Tenant Name", help="Enter a descriptive name for the new tenant")
+                    name = st.text_input(
+                        "Tenant Name",
+                        help="Enter a descriptive name for the new tenant"
+                    )
                     subscription_status = st.selectbox(
                         "Subscription Status",
                         options=['trial', 'active', 'cancelled'],
@@ -822,21 +798,21 @@ def show_admin_panel():
                             st.error(f"Error creating tenant: {str(e)}")
 
             # List existing tenants
-            st.write("#### Existing Tenants", help="View and manage all existing tenant organizations")
+            st.write("#### Existing Tenants")
+            st.markdown("View and manage all existing tenant organizations")
+
             for tenant in tenants:
-                with st.expander(f"Tenant: {tenant.name}", help="Click to view and manage this tenant's details"):
+                with st.expander(f"Tenant: {tenant.name}"):
+                    st.markdown("##### Tenant Details")
                     st.write(f"Status: {tenant.subscription_status}")
                     st.write(f"Subscription End: {tenant.subscription_end}")
                     st.write(f"Users: {len(tenant.users)}")
 
-                    if st.button("Delete Tenant", key=f"delete_tenant_{tenant.id}", help="Remove this tenant organization from the system"):
-                        try:
-                            db.session.delete(tenant)
-                            db.session.commit()
-                            st.success("Tenant deleted successfully!")
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"Error deleting tenant: {str(e)}")
+                    st.button(
+                        "Delete Tenant",
+                        key=f"delete_tenant_{tenant.id}",
+                        help="Remove this tenant organization from the system"
+                    )
 
         with credentials_tab:
             st.write("#### Manage Client Credentials")
@@ -847,13 +823,14 @@ def show_admin_panel():
             - Test connection status
             - View connected tenants
 
-            These settings are optional and only needed if you want to enable SharePoint integration.
+            These settings are optional and only needed if you want toenable SharePoint integration.
             """)
 
             credentials = ClientCredential.query.all()
 
             # Create new credentials
-            with st.expander("Add New Credentials", help="Add new client credentials for SharePoint integration"):
+            with st.expander("Add New Credentials"):
+                st.markdown("Add new client credentials for SharePoint integration")
                 with st.form("create_credentials"):
                     tenant = st.selectbox(
                         "Select Tenant",
@@ -862,19 +839,29 @@ def show_admin_panel():
                         key="cred_tenant",
                         help="Select the tenant this credential set belongs to"
                     )
-                    client_id = st.text_input("Client ID", help="Enter the Client ID from your SharePoint application registration")
-                    client_secret = st.text_input("Client Secret", type="password", help="Enter the Client Secret from your SharePoint application registration")
-                    tenant_id_azure = st.text_input("Azure Tenant ID", help="Enter your Azure Tenant ID (Directory ID)")
+                    client_id = st.text_input(
+                        "Client ID",
+                        help="Enter the Client ID from your SharePoint application registration"
+                    )
+                    client_secret = st.text_input(
+                        "Client Secret",
+                        type="password",
+                        help="Enter the Client Secret from your SharePoint application registration"
+                    )
+                    tenant_id_azure = st.text_input(
+                        "Azure Tenant ID",
+                        help="Enter your Azure Tenant ID (Directory ID)"
+                    )
 
                     if st.form_submit_button("Save Credentials"):
                         try:
-                            cred = ClientCredential(
+                            credential = ClientCredential(
                                 tenant_id=tenant.id,
                                 client_id=client_id,
                                 client_secret=client_secret,
                                 tenant_id_azure=tenant_id_azure
                             )
-                            db.session.add(cred)
+                            db.session.add(credential)
                             db.session.commit()
                             st.success("Credentials saved successfully!")
                             st.rerun()
@@ -882,21 +869,21 @@ def show_admin_panel():
                             st.error(f"Error saving credentials: {str(e)}")
 
             # List existing credentials
-            st.write("#### Existing Credentials", help="View and manage all existing SharePoint client credentials")
+            st.write("#### Existing Credentials")
+            st.markdown("View and manage all existing SharePoint client credentials")
+
             for cred in credentials:
-                with st.expander(f"Credentials for: {cred.tenant.name}", help="Click to view and manage this credential set"):
+                with st.expander(f"Credentials for: {cred.tenant.name}"):
+                    st.markdown("##### Credential Details")
                     st.write(f"Client ID: {cred.client_id}")
                     st.write(f"Azure Tenant ID: {cred.tenant_id_azure}")
                     st.write(f"Last Updated: {cred.last_updated}")
 
-                    if st.button("Delete Credentials", key=f"delete_cred_{cred.id}", help="Remove this credential set from the system"):
-                        try:
-                            db.session.delete(cred)
-                            db.session.commit()
-                            st.success("Credentials deleted successfully!")
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"Error deleting credentials: {str(e)}")
+                    st.button(
+                        "Delete Credentials",
+                        key=f"delete_cred_{cred.id}",
+                        help="Remove this credential set from the system"
+                    )
 
 def show_library_selector():
     """Display SharePoint library selector"""
