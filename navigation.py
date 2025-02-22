@@ -27,27 +27,24 @@ def show_navigation():
             st.rerun()
 
         # Admin controls
-        if 'user' in st.session_state:
-            with app.app_context():
-                user = User.query.get(st.session_state['user'])
-                if user and user.is_admin:
-                    st.markdown("---")
-                    st.markdown("### Admin Controls")
+        if st.session_state.get('is_admin', False) and st.session_state.get('user'):
+            st.markdown("---")
+            st.markdown("### Admin Controls")
 
-                    if st.button("⚙️ Admin Dashboard", key="nav_admin"):
-                        st.session_state['current_page'] = 'admin'
-                        st.session_state['show_setup'] = False
-                        st.session_state['show_credentials'] = False
-                        st.rerun()
+            if st.button("⚙️ Admin Dashboard", key="nav_admin"):
+                st.session_state['current_page'] = 'admin'
+                st.session_state['show_setup'] = False
+                st.session_state['show_credentials'] = False
+                st.rerun()
 
-                    if st.button("👥 User Management", key="nav_users"):
-                        st.session_state['current_page'] = 'user_management'
-                        st.session_state['show_setup'] = False
-                        st.session_state['show_credentials'] = False
-                        st.rerun()
+            if st.button("👥 User Management", key="nav_users"):
+                st.session_state['current_page'] = 'user_management'
+                st.session_state['show_setup'] = False
+                st.session_state['show_credentials'] = False
+                st.rerun()
 
-                    if st.button("🏢 Tenant Settings", key="nav_tenant"):
-                        st.session_state['current_page'] = 'tenant_settings'
-                        st.session_state['show_setup'] = False
-                        st.session_state['show_credentials'] = False
-                        st.rerun()
+            if st.button("🏢 Tenant Settings", key="nav_tenant"):
+                st.session_state['current_page'] = 'tenant_settings'
+                st.session_state['show_setup'] = False
+                st.session_state['show_credentials'] = False
+                st.rerun()

@@ -166,6 +166,10 @@ def initialize_session_state():
         st.session_state['problematic_files'] = []
     if 'current_page' not in st.session_state:
         st.session_state['current_page'] = 'home'
+    if 'user' not in st.session_state:
+        st.session_state['user'] = None
+    if 'is_admin' not in st.session_state:
+        st.session_state['is_admin'] = False
 
 def apply_rename_pattern(filename, pattern):
     """Apply rename pattern to filename"""
@@ -523,7 +527,7 @@ def show_file_manager(library_name):
                     with col1:
                         # Checkbox for selection
                         is_selected = st.checkbox("", key=f"select_{file['Id']}",
-                                                    value=file['Id'] in st.session_state.selected_files)
+                                                        value=file['Id'] in st.session_state.selected_files)
                         if is_selected:
                             st.session_state.selected_files[file['Id']] = file
                         elif file['Id'] in st.session_state.selected_files:
@@ -599,37 +603,38 @@ def show_login():
 
         if submit:
             if email and password:
-                user = User.query.filter_by(email=email).first()
-                if user and user.check_password(password):
-                    if user.mfa_enabled:
-                        if 'pending_mfa_user' not in st.session_state:
-                            # First step: Show MFA input
-                            st.session_state['pending_mfa_user'] = user.id
-                            st.rerun()
-                        else:
-                            # Second step: Verify MFA
-                            mfa_code = st.session_state.get("mfa_input")
-                            if mfa_code and user.verify_mfa(mfa_code):
-                                st.session_state['user'] = user.id
-                                st.session_state['is_admin'] = user.is_admin
-                                st.session_state['authenticated'] = True
-                                if 'pending_mfa_user' in st.session_state:
-                                    del st.session_state['pending_mfa_user']
-                                st.success("Login successful!")
-                                time.sleep(1)
+                with app.app_context():
+                    user = User.query.filter_by(email=email).first()
+                    if user and user.check_password(password):
+                        if user.mfa_enabled:
+                            if 'pending_mfa_user' not in st.session_state:
+                                # First step: Show MFA input
+                                st.session_state['pending_mfa_user'] = user.id
                                 st.rerun()
                             else:
-                                st.error("Invalid verification code")
+                                # Second step: Verify MFA
+                                mfa_code = st.session_state.get("mfa_input")
+                                if mfa_code and user.verify_mfa(mfa_code):
+                                    st.session_state['user'] = user.id
+                                    st.session_state['is_admin'] = user.is_admin
+                                    st.session_state['authenticated'] = True
+                                    if 'pending_mfa_user' in st.session_state:
+                                        del st.session_state['pending_mfa_user']
+                                    st.success("Login successful!")
+                                    time.sleep(1)
+                                    st.rerun()
+                                else:
+                                    st.error("Invalid verification code")
+                        else:
+                            # No MFA required
+                            st.session_state['user'] = user.id
+                            st.session_state['is_admin'] = user.is_admin
+                            st.session_state['authenticated'] = True
+                            st.success("Login successful!")
+                            time.sleep(1)
+                            st.rerun()
                     else:
-                        # No MFA required
-                        st.session_state['user'] = user.id
-                        st.session_state['is_admin'] = user.is_admin
-                        st.session_state['authenticated'] = True
-                        st.success("Login successful!")
-                        time.sleep(1)
-                        st.rerun()
-                else:
-                    st.error("Invalid email or password")
+                        st.error("Invalid email or password")
 
 
 def show_admin_panel():
