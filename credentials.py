@@ -10,10 +10,19 @@ logger = logging.getLogger(__name__)
 def show_credentials_manager():
     """Display Azure AD credentials management interface"""
     st.write("### Azure AD Credentials Configuration")
+
+    # Add security notice
     st.info("""
     These credentials are required for SharePoint authentication. They should be obtained
     from your Azure AD application registration. For detailed instructions on obtaining
     these credentials, please refer to the Setup Guide.
+    """)
+
+    # Add encryption notice
+    st.success("""
+    🔒 **Security Notice:**
+    All credentials are encrypted both in transit and at rest using industry-standard encryption.
+    Your sensitive information is protected at all times through secure protocols and storage mechanisms.
     """)
 
     with st.form("azure_credentials_form", clear_on_submit=False):
