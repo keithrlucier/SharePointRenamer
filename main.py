@@ -527,7 +527,7 @@ def show_file_manager(library_name):
                     with col1:
                         # Checkbox for selection
                         is_selected = st.checkbox("", key=f"select_{file['Id']}",
-                                                        value=file['Id'] in st.session_state.selected_files)
+                                                                value=file['Id'] in st.session_state.selected_files)
                         if is_selected:
                             st.session_state.selected_files[file['Id']] = file
                         elif file['Id'] in st.session_state.selected_files:
@@ -885,15 +885,24 @@ def show_library_selector():
 
 def main():
     initialize_session_state()
+
+    # Check login state first
+    if not st.session_state.get('user'):
+        show_login()
+        return
+
+    # After login, show navigation
     show_navigation()
 
     # Handle different pages based on current_page state
-    if not st.session_state.get('user'):
-        show_login()
-    else:
-        current_page = st.session_state.get('current_page', 'home')
+    current_page = st.session_state.get('current_page', 'home')
 
-        if current_page == 'home':
+    if current_page == 'home':
+        if st.session_state.get('is_admin', False):
+            # For admin users, show admin dashboard by default
+            show_admin_panel()
+        else:
+            # For regular users, show SharePoint connection setup
             if not st.session_state.get('client'):
                 st.warning("Please set up your SharePoint credentials first.")
                 if st.button("Configure SharePoint Credentials"):
@@ -902,7 +911,7 @@ def main():
                     st.rerun()
             elif st.session_state.get('authenticated', False):
                 try:
-                    # Show SharePoint libraries and file management
+                    # Show SharePoint libraries
                     libraries = st.session_state.client.get_libraries()
                     if libraries:
                         selected_library = st.selectbox("Select Library", libraries)
@@ -925,32 +934,20 @@ def main():
                     st.session_state['show_setup'] = False
                     st.rerun()
 
-        elif current_page == 'mfa_setup':
-            show_mfa_setup()
+    elif current_page == 'mfa_setup':
+        show_mfa_setup()
 
-        elif current_page == 'admin':
-            if st.session_state.get('is_admin', False):
-                show_admin_panel()
-            else:
-                st.error("Access denied. Admin privileges required.")
+    elif current_page in ['admin', 'user_management', 'tenant_settings']:
+        if st.session_state.get('is_admin', False):
+            show_admin_panel()
+        else:
+            st.error("Access denied. Admin privileges required.")
 
-        elif current_page == 'user_management':
-            if st.session_state.get('is_admin', False):
-                show_admin_panel()  # This will show the users tab by default
-            else:
-                st.error("Access denied. Admin privileges required.")
+    elif st.session_state.get('show_setup', False):
+        show_setup_guide()
 
-        elif current_page == 'tenant_settings':
-            if st.session_state.get('is_admin', False):
-                show_admin_panel()  # This will show the tenants tab by default
-            else:
-                st.error("Access denied. Admin privileges required.")
-
-        elif st.session_state.get('show_setup', False):
-            show_setup_guide()
-
-        elif st.session_state.get('show_credentials', False):
-            show_credentials_manager()
+    elif st.session_state.get('show_credentials', False):
+        show_credentials_manager()
 
 if __name__ == "__main__":
     main()

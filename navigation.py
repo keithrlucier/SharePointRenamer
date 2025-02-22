@@ -14,37 +14,49 @@ def show_navigation():
         st.title("Navigation")
 
         # Basic navigation for all users
-        if st.button("🏠 Home", key="nav_home"):
+        if st.button("🏠 Home"):
             st.session_state['current_page'] = 'home'
             st.session_state['show_setup'] = False
             st.session_state['show_credentials'] = False
             st.rerun()
 
-        if st.button("🔐 MFA Setup", key="nav_mfa"):
+        if st.button("🔐 MFA Setup"):
             st.session_state['current_page'] = 'mfa_setup'
             st.session_state['show_setup'] = False
             st.session_state['show_credentials'] = False
             st.rerun()
 
         # Admin controls
-        if st.session_state.get('is_admin', False) and st.session_state.get('user'):
+        if st.session_state.get('is_admin', False):
             st.markdown("---")
             st.markdown("### Admin Controls")
 
-            if st.button("⚙️ Admin Dashboard", key="nav_admin"):
-                st.session_state['current_page'] = 'admin'
-                st.session_state['show_setup'] = False
+            col1, col2 = st.columns(2)
+
+            with col1:
+                if st.button("👥 Users"):
+                    st.session_state['current_page'] = 'user_management'
+                    st.session_state['show_setup'] = False
+                    st.session_state['show_credentials'] = False
+                    st.rerun()
+
+            with col2:
+                if st.button("🏢 Tenants"):
+                    st.session_state['current_page'] = 'tenant_settings'
+                    st.session_state['show_setup'] = False
+                    st.session_state['show_credentials'] = False
+                    st.rerun()
+
+            # SharePoint options for admins (optional)
+            st.markdown("### SharePoint Options")
+            if st.button("📚 Setup Guide"):
+                st.session_state['current_page'] = 'setup'
+                st.session_state['show_setup'] = True
                 st.session_state['show_credentials'] = False
                 st.rerun()
 
-            if st.button("👥 User Management", key="nav_users"):
-                st.session_state['current_page'] = 'user_management'
+            if st.button("⚙️ Credentials"):
+                st.session_state['current_page'] = 'credentials'
+                st.session_state['show_credentials'] = True
                 st.session_state['show_setup'] = False
-                st.session_state['show_credentials'] = False
-                st.rerun()
-
-            if st.button("🏢 Tenant Settings", key="nav_tenant"):
-                st.session_state['current_page'] = 'tenant_settings'
-                st.session_state['show_setup'] = False
-                st.session_state['show_credentials'] = False
                 st.rerun()
